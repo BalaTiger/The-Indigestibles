@@ -1,10 +1,8 @@
 import {
   HEROES,
   TRAITS,
-  buildRunPlan,
   getEnemyBlueprint,
   getStarterDeck,
-  pickLargeBoss,
 } from "../data/content";
 
 let runtimeId = 1;
@@ -310,7 +308,7 @@ function checkCombatState(state, report) {
   }
   if (!getAliveEnemies(state).length) {
     state.phase = "victory";
-    enqueueBanner(report, "战斗清场", "继续向下蠕动", "victory");
+    enqueueBanner(report, "战斗清场", "", "victory");
   }
 }
 
@@ -629,63 +627,12 @@ function captureRemovedEnemies(beforeEnemies, afterEnemies) {
   return beforeEnemies.filter((enemy) => !afterIds.has(enemy.instanceId));
 }
 
-export function createDemoState({ classId = "enoki", buildId = "guardian" } = {}) {
-  const hero = HEROES[classId];
-  const finalBossId = pickLargeBoss(Math.random());
-  const layers = buildRunPlan(finalBossId);
-
-  const state = {
-    title: "The Indigestibles",
-    classId,
-    buildId,
-    hero,
-    finalBossId,
-    layers,
-    layerIndex: 0,
-    encounterIndex: 0,
-    currentEncounter: null,
-    phase: "player",
-    turn: 1,
-    log: [],
-    player: {
-      classId,
-      buildId,
-      name: hero.name,
-      maxHp: hero.maxHp,
-      hp: hero.maxHp,
-      maxEnergy: hero.energy,
-      energy: hero.energy,
-      block: 0,
-      deck: [],
-      discard: [],
-      hand: [],
-      minis: [],
-      deadMinis: 0,
-      currentTraitId: null,
-      focusChain: 0,
-      lastAbsorbedTraitId: null,
-      traits: [],
-      status: {
-        bodyguardHits: 0,
-        retaliate: 0,
-        decoyReady: 0,
-      },
-    },
-    enemies: [],
-  };
-
-  return openEncounter(state, 0, 0, 0);
-}
-
-export function openEncounter(baseState, layerIndex, encounterIndex, heal = 0) {
+export function openEncounter(baseState, layer, encounter, heal = 0) {
   const state = cloneState(baseState);
-  const layer = state.layers[layerIndex];
-  const encounter = layer.encounters[encounterIndex];
   const deck = buildDeckInstances(state.classId, state.buildId);
   const draw = drawCardsRaw(deck, [], 5);
 
-  state.layerIndex = layerIndex;
-  state.encounterIndex = encounterIndex;
+  state.layerIndex = layer.layerIndex;
   state.currentEncounter = {
     ...encounter,
     layerName: layer.name,
@@ -714,7 +661,7 @@ export function openEncounter(baseState, layerIndex, encounterIndex, heal = 0) {
     decoyReady: 0,
   };
   state.log = [];
-  pushLog(state, `进入 ${layer.name}·${encounter.name}。`);
+  pushLog(state, `进入 ${layer.name} · ${encounter.name}。`);
   pushLog(state, encounter.note);
   refreshEnemyIntents(state);
   return state;
@@ -856,27 +803,6 @@ export function startNextPlayerTurn(state) {
   enqueueBanner(report, "你的回合", `第 ${next.turn} 轮`, "player");
   pushLog(next, "你踩稳了地面，重新摸满手牌。");
   return { nextState: next, report };
-}
-
-export function continueRun(state) {
-  const lastLayer = state.layerIndex === state.layers.length - 1;
-  const lastEncounter = state.encounterIndex === state.layers[state.layerIndex].encounters.length - 1;
-
-  if (lastLayer && lastEncounter) {
-    const next = cloneState(state);
-    next.phase = "runComplete";
-    return next;
-  }
-
-  let layerIndex = state.layerIndex;
-  let encounterIndex = state.encounterIndex + 1;
-  if (encounterIndex >= state.layers[layerIndex].encounters.length) {
-    layerIndex += 1;
-    encounterIndex = 0;
-  }
-
-  const heal = state.currentEncounter?.boss ? 10 : 6;
-  return openEncounter(state, layerIndex, encounterIndex, heal);
 }
 
 export function getCurrentTheme(state) {

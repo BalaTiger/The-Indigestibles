@@ -4,6 +4,39 @@ export const LARGE_BOSS_POOL = [
   "gas-duke",
 ];
 
+export const MAP_CONFIG = {
+  layerNodeCountRange: [5, 7],
+  maxBranchByLayer: { 0: 2, 1: 3, 2: 4 },
+  middleNodeTypes: ["elite", "shop", "event", "campfire"],
+  layerBossIds: ["pyloric-sentry", "brush-border-warden"],
+  normalPools: {
+    0: ["acidic-dumpling", "sour-yogurt"],
+    1: ["bile-scout", "villus-bandit"],
+    2: ["fermenting-rice", "mucus-polyp"],
+  },
+  elitePools: {
+    0: ["acidic-dumpling", "sour-yogurt"],
+    1: ["bile-scout", "villus-bandit"],
+    2: ["fermenting-rice", "mucus-polyp"],
+  },
+  nodeTypeNames: {
+    combat: "普通战斗",
+    elite: "精英战斗",
+    boss: "Boss",
+    shop: "商店",
+    event: "事件",
+    campfire: "篝火",
+  },
+  nodeTypeColors: {
+    combat: "#a4d566",
+    elite: "#ff9e6d",
+    boss: "#d96f86",
+    shop: "#74d4b3",
+    event: "#94c8ff",
+    campfire: "#f3a06c",
+  },
+};
+
 export const HEROES = {
   enoki: {
     id: "enoki",
@@ -250,6 +283,7 @@ const ENEMY_LIBRARY = {
     id: "acidic-dumpling",
     name: "酸泡饺子",
     glyph: "酸",
+    tier: "normal",
     maxHp: 24,
     traitId: "acidSplash",
     intentCycle: [
@@ -262,6 +296,7 @@ const ENEMY_LIBRARY = {
     id: "sour-yogurt",
     name: "返酸酸奶",
     glyph: "酵",
+    tier: "normal",
     maxHp: 26,
     traitId: "mucusWrap",
     intentCycle: [
@@ -274,6 +309,7 @@ const ENEMY_LIBRARY = {
     id: "pyloric-sentry",
     name: "幽门守闸肌",
     glyph: "门",
+    tier: "boss",
     maxHp: 72,
     traitId: "acidSplash",
     boss: true,
@@ -287,6 +323,7 @@ const ENEMY_LIBRARY = {
     id: "bile-scout",
     name: "胆汁斥候",
     glyph: "胆",
+    tier: "normal",
     maxHp: 28,
     traitId: "bileJet",
     intentCycle: [
@@ -299,6 +336,7 @@ const ENEMY_LIBRARY = {
     id: "villus-bandit",
     name: "绒毛劫匪",
     glyph: "绒",
+    tier: "normal",
     maxHp: 30,
     traitId: "villusSnare",
     intentCycle: [
@@ -311,6 +349,7 @@ const ENEMY_LIBRARY = {
     id: "brush-border-warden",
     name: "刷状缘监工",
     glyph: "刷",
+    tier: "boss",
     maxHp: 78,
     traitId: "villusSnare",
     boss: true,
@@ -324,6 +363,7 @@ const ENEMY_LIBRARY = {
     id: "fermenting-rice",
     name: "发酵米团",
     glyph: "胀",
+    tier: "normal",
     maxHp: 29,
     traitId: "gasBurst",
     intentCycle: [
@@ -336,6 +376,7 @@ const ENEMY_LIBRARY = {
     id: "mucus-polyp",
     name: "黏膜息肉",
     glyph: "黏",
+    tier: "normal",
     maxHp: 32,
     traitId: "putridRush",
     intentCycle: [
@@ -348,6 +389,7 @@ const ENEMY_LIBRARY = {
     id: "mr-hemorrhoid",
     name: "痔疮先生",
     glyph: "痔",
+    tier: "boss",
     maxHp: 84,
     traitId: "clotClamp",
     boss: true,
@@ -361,6 +403,7 @@ const ENEMY_LIBRARY = {
     id: "constipation-idol",
     name: "便秘偶像",
     glyph: "梗",
+    tier: "boss",
     maxHp: 88,
     traitId: "dryPlug",
     boss: true,
@@ -374,6 +417,7 @@ const ENEMY_LIBRARY = {
     id: "gas-duke",
     name: "胀气公爵",
     glyph: "公",
+    tier: "boss",
     maxHp: 80,
     traitId: "gasBurst",
     boss: true,

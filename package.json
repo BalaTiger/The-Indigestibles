@@ -6,7 +6,10 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview --host 127.0.0.1"
+    "preview": "vite preview --host 127.0.0.1",
+    "electron:dev": "npm run build && electron .",
+    "electron:build": "npm run build && electron-builder",
+    "electron:pack": "npm run build && electron-builder --dir"
   },
   "dependencies": {
     "lucide-react": "^0.552.0",
@@ -15,6 +18,20 @@
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^5.1.1",
+    "electron": "^33.0.0",
+    "electron-builder": "^25.1.0",
     "vite": "^8.0.0-beta.13"
+  },
+  "main": "electron/main.cjs",
+  "build": {
+    "appId": "com.tiger.the-indigestibles",
+    "productName": "The Indigestibles",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "electron/**/*"
+    ]
   }
 }

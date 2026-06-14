@@ -1,37 +1,42 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { FastForward, Leaf, Map, RotateCcw, Shield, Shell, Sparkles, Swords } from "lucide-react";
+import { HEROES, TRAITS } from "./data/content";
 import {
-  FastForward,
-  Leaf,
-  RotateCcw,
-  Shell,
-  Shield,
-  Sparkles,
-  Swords,
-} from "lucide-react";
-import { HEROES, LARGE_BOSS_POOL, TRAITS } from "./data/content";
+  advanceToLayer,
+  createRunState,
+  findNodeById,
+  getCurrentLayer,
+  getCurrentNode,
+  isFinalBossNode,
+  makeEncounterFromNode,
+  markNodeCleared,
+  restAtCampfire,
+  unlockNextNodes,
+} from "./game/navigation";
 import {
-  continueRun,
-  createDemoState,
   endPlayerTurn,
-  getBuildInfo,
   getCurrentTheme,
   getValidTargets,
+  openEncounter,
   playCard,
   resolveEnemyAction,
   startNextPlayerTurn,
 } from "./game/engine";
 import { HandFan } from "./components/HandFan";
 import { FxFloaters } from "./components/FxLayer";
+import { EnemyPanel } from "./components/EnemyPanel";
+import { BattleAvatar } from "./components/BattleAvatar";
+import { TitleScreen } from "./screens/TitleScreen";
+import { HeroSelectScreen } from "./screens/HeroSelectScreen";
+import { MapScreen } from "./screens/MapScreen";
+import { ShopScreen } from "./screens/ShopScreen";
+import { EventScreen } from "./screens/EventScreen";
+import { CampfireScreen } from "./screens/CampfireScreen";
+import { VictoryModal } from "./screens/VictoryModal";
+import { DefeatModal } from "./screens/DefeatModal";
 
 function wait(ms) {
   return new Promise((resolve) => window.setTimeout(resolve, ms));
-}
-
-function intentTone(intent) {
-  if (!intent) return "neutral";
-  if (intent.type === "guard") return "guard";
-  if (intent.type === "attackAll" || intent.type === "miniSweep") return "burst";
-  return "attack";
 }
 
 function makeTargetKey(kind, id) {
@@ -40,15 +45,6 @@ function makeTargetKey(kind, id) {
 
 function classIcon(classId) {
   return classId === "enoki" ? Leaf : Shell;
-}
-
-function Portrait({ glyph, accent, label }) {
-  return (
-    <div className="portrait" style={{ "--portrait-accent": accent }}>
-      <div className="portrait__glyph">{glyph}</div>
-      <div className="portrait__label">{label}</div>
-    </div>
-  );
 }
 
 function MiniColony({ minis, floaters }) {
@@ -104,164 +100,19 @@ function TraitRack({ player, buildId }) {
   );
 }
 
-function RunTrack({ state }) {
-  return (
-    <div className="run-track">
-      {state.layers.map((layer, layerIndex) => (
-        <div key={layer.id} className={`run-track__layer ${layerIndex === state.layerIndex ? "is-current" : ""}`}>
-          <div className="run-track__head">
-            <span>{layer.name}</span>
-            <small>{layer.subtitle}</small>
-          </div>
-          <div className="run-track__nodes">
-            {layer.encounters.map((encounter, encounterIndex) => {
-              const done =
-                layerIndex < state.layerIndex ||
-                (layerIndex === state.layerIndex && encounterIndex < state.encounterIndex);
-              const current = layerIndex === state.layerIndex && encounterIndex === state.encounterIndex;
-              return (
-                <div
-                  key={encounter.id}
-                  className={`run-track__node ${done ? "is-done" : ""} ${current ? "is-active" : ""} ${
-                    encounter.boss ? "is-boss" : ""
-                  }`}
-                >
-                  <span>{encounter.boss ? "B" : "·"}</span>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-function Sidebar({
-  state,
-  config,
-  onClassChange,
-  onBuildChange,
-  onRestart,
-}) {
-  const hero = HEROES[config.classId];
-  const build = hero.builds[config.buildId];
-
-  return (
-    <aside className="side-rail">
-      <section className="rail-section">
-        <div className="rail-title">宿主选择</div>
-        <div className="segmented">
-          {Object.values(HEROES).map((candidate) => {
-            const Icon = classIcon(candidate.id);
-            return (
-              <button
-                key={candidate.id}
-                type="button"
-                className={`segment ${candidate.id === config.classId ? "is-active" : ""}`}
-                onClick={() => onClassChange(candidate.id)}
-              >
-                <Icon size={16} />
-                <span>{candidate.name}</span>
-              </button>
-            );
-          })}
-        </div>
-        <div className="segmented segmented--builds">
-          {Object.values(hero.builds).map((candidate) => (
-            <button
-              key={candidate.id}
-              type="button"
-              className={`segment ${candidate.id === config.buildId ? "is-active" : ""}`}
-              onClick={() => onBuildChange(candidate.id)}
-            >
-              <span>{candidate.name}</span>
-            </button>
-          ))}
-        </div>
-        <div className="hero-copy">
-          <strong>{hero.summary}</strong>
-          <p>{hero.mechanic}</p>
-          <p>{build.passive}</p>
-          <p>{build.vibe}</p>
-        </div>
-        <button type="button" className="action-button" onClick={onRestart}>
-          <RotateCcw size={16} />
-          <span>重开这趟肠旅</span>
-        </button>
-      </section>
-
-      <section className="rail-section">
-        <div className="rail-title">本轮路线</div>
-        <RunTrack state={state} />
-      </section>
-
-      <section className="rail-section">
-        <div className="rail-title">大肠 Boss 池</div>
-        <div className="boss-pool">
-          {LARGE_BOSS_POOL.map((bossId) => (
-            <div key={bossId} className={`boss-chip ${bossId === state.finalBossId ? "is-active" : ""}`}>
-              {bossId === "mr-hemorrhoid" && "痔疮先生"}
-              {bossId === "constipation-idol" && "便秘偶像"}
-              {bossId === "gas-duke" && "胀气公爵"}
-            </div>
-          ))}
-        </div>
-      </section>
-    </aside>
-  );
-}
-
-function EnemyPanel({ enemy, onTarget, targeted, floaters }) {
-  return (
-    <button
-      type="button"
-      className={`enemy-panel ${targeted ? "is-targeted" : ""}`}
-      onClick={onTarget}
-    >
-      <FxFloaters floaters={floaters[makeTargetKey("enemy", enemy.instanceId)]} />
-      <Portrait glyph={enemy.glyph} accent={TRAITS[enemy.traitId]?.color || "#cda16d"} label={enemy.name} />
-      <div className="enemy-panel__stats">
-        <div>
-          <strong>{enemy.hp}</strong>
-          <span>/ {enemy.maxHp}</span>
-        </div>
-        <div>格挡 {enemy.block}</div>
-      </div>
-      <div className={`intent-badge intent-badge--${intentTone(enemy.intent)}`}>
-        <span>{enemy.intent.label}</span>
-        <small>
-          {enemy.intent.type === "guard"
-            ? `+${enemy.intent.value} 壳`
-            : enemy.intent.type === "attackAll"
-            ? `${enemy.intent.value} / 全体`
-            : enemy.intent.type === "miniSweep"
-            ? `${enemy.intent.value} / 菌群`
-            : `${enemy.intent.value ?? enemy.intent.guard ?? 0}`}
-        </small>
-      </div>
-      <div className="enemy-panel__trait" style={{ "--trait-color": TRAITS[enemy.traitId]?.color || "#d6a97f" }}>
-        <span>{TRAITS[enemy.traitId]?.short}</span>
-        <div>
-          <strong>{TRAITS[enemy.traitId]?.name}</strong>
-          <small>{TRAITS[enemy.traitId]?.description}</small>
-        </div>
-      </div>
-    </button>
-  );
-}
-
 export default function App() {
+  const [screen, setScreen] = useState("title");
   const [config, setConfig] = useState({
     classId: "enoki",
     buildId: "guardian",
   });
-  const [state, setState] = useState(() => createDemoState(config));
+  const [state, setState] = useState(() => createRunState(config));
   const [selectedCardId, setSelectedCardId] = useState(null);
   const [floaters, setFloaters] = useState({});
   const [banner, setBanner] = useState(null);
   const [isResolving, setIsResolving] = useState(false);
   const [shakeToken, setShakeToken] = useState(0);
+  const [showMapOverlay, setShowMapOverlay] = useState(false);
   const stateRef = useRef(state);
 
   useEffect(() => {
@@ -270,7 +121,7 @@ export default function App() {
 
   const theme = getCurrentTheme(state);
   const hero = HEROES[config.classId];
-  const build = getBuildInfo(config.classId, config.buildId);
+  const build = hero.builds[config.buildId];
   const aliveEnemies = state.enemies.filter((enemy) => enemy.hp > 0);
   const selectedCard = state.player.hand.find((card) => card.instanceId === selectedCardId) || null;
   const validTargets = useMemo(() => getValidTargets(state, selectedCard), [state, selectedCard]);
@@ -316,36 +167,111 @@ export default function App() {
     return () => window.clearTimeout(timer);
   }, [banner]);
 
-  const resetWithConfig = useCallback(
-    (nextConfig) => {
-      setConfig(nextConfig);
+  const startNewRun = useCallback((classId, buildId) => {
+    const nextConfig = { classId, buildId };
+    setConfig(nextConfig);
+    const runState = createRunState(nextConfig);
+    const layer = getCurrentLayer(runState);
+    const node = getCurrentNode(runState);
+    const encounter = makeEncounterFromNode(node, layer);
+    setState(openEncounter(runState, layer, encounter, 0));
+    setScreen("map");
+  }, []);
+
+  const restartRun = useCallback(() => {
+    startNewRun(config.classId, config.buildId);
+  }, [config, startNewRun]);
+
+  const enterNode = useCallback(
+    (node) => {
+      if (!node.unlocked || isResolving) return;
       setSelectedCardId(null);
       setFloaters({});
       setBanner(null);
       setIsResolving(false);
-      setState(createDemoState(nextConfig));
+
+      const layer = state.layers[node.layerIndex];
+      const next = { ...state, currentNodeId: node.id };
+
+      if (node.type === "combat" || node.type === "elite" || node.type === "boss") {
+        const encounter = makeEncounterFromNode(node, layer);
+        setState(openEncounter(next, layer, encounter, 0));
+        setScreen("combat");
+        return;
+      }
+
+      setState(next);
+      if (node.type === "shop") setScreen("shop");
+      else if (node.type === "event") setScreen("event");
+      else if (node.type === "campfire") setScreen("campfire");
     },
-    [],
+    [isResolving, state],
   );
 
-  const handleClassChange = useCallback(
-    (classId) => {
-      const buildId = Object.keys(HEROES[classId].builds)[0];
-      resetWithConfig({ classId, buildId });
-    },
-    [resetWithConfig],
-  );
+  const returnToMap = useCallback(() => {
+    setSelectedCardId(null);
+    setFloaters({});
+    setBanner(null);
+    setIsResolving(false);
+    setScreen("map");
+  }, []);
 
-  const handleBuildChange = useCallback(
-    (buildId) => {
-      resetWithConfig({ ...config, buildId });
-    },
-    [config, resetWithConfig],
-  );
+  const completeNodeAndReturn = useCallback((baseState = null) => {
+    const current = baseState || stateRef.current;
+    const currentNode = getCurrentNode(current);
+    if (!currentNode) return;
 
-  const handleRestart = useCallback(() => {
-    resetWithConfig(config);
-  }, [config, resetWithConfig]);
+    const next = { ...current };
+    markNodeCleared(next, currentNode.id);
+
+    if (isFinalBossNode(next, currentNode)) {
+      setState(next);
+      setScreen("victory-modal");
+      return;
+    }
+
+    if (currentNode.type === "boss") {
+      advanceToLayer(next, next.layerIndex + 1);
+      setState(next);
+      setScreen("map");
+      return;
+    }
+
+    unlockNextNodes(next, currentNode.id);
+    setState(next);
+    setScreen("map");
+  }, []);
+
+  const handleVictoryConfirm = useCallback(() => {
+    const currentNode = getCurrentNode(state);
+    if (isFinalBossNode(state, currentNode)) {
+      setScreen("title");
+      return;
+    }
+    completeNodeAndReturn();
+  }, [completeNodeAndReturn, state]);
+
+  const handleDefeatConfirm = useCallback(() => {
+    setScreen("title");
+  }, []);
+
+  const handleCampfireRest = useCallback(() => {
+    const next = restAtCampfire({ ...state });
+    setState(next);
+    window.setTimeout(() => completeNodeAndReturn(next), 50);
+  }, [completeNodeAndReturn, state]);
+
+  const handleCampfireLeave = useCallback(() => {
+    completeNodeAndReturn();
+  }, [completeNodeAndReturn]);
+
+  const handleQuit = useCallback(() => {
+    if (window.electronAPI?.quit) {
+      window.electronAPI.quit();
+    } else {
+      window.close();
+    }
+  }, []);
 
   const canPlaySelectedCard = useCallback(
     (card) => {
@@ -372,8 +298,14 @@ export default function App() {
       setSelectedCardId(null);
       await wait(450);
       setIsResolving(false);
+
+      if (nextState.phase === "victory") {
+        window.setTimeout(() => completeNodeAndReturn(nextState), 500);
+      } else if (nextState.phase === "defeat") {
+        window.setTimeout(() => setScreen("defeat-modal"), 500);
+      }
     },
-    [handleReport, isResolving],
+    [completeNodeAndReturn, handleReport, isResolving],
   );
 
   const onCardClick = useCallback(
@@ -420,6 +352,11 @@ export default function App() {
       await wait(650);
       if (workingState.phase === "victory" || workingState.phase === "defeat") {
         setIsResolving(false);
+        if (workingState.phase === "victory") {
+          window.setTimeout(() => completeNodeAndReturn(workingState), 900);
+        } else {
+          window.setTimeout(() => setScreen("defeat-modal"), 900);
+        }
         return;
       }
     }
@@ -429,223 +366,277 @@ export default function App() {
     handleReport(startResult.report);
     await wait(450);
     setIsResolving(false);
-  }, [handleReport, isResolving, state.phase]);
+  }, [completeNodeAndReturn, handleReport, isResolving, state.phase]);
 
-  const handleContinue = useCallback(() => {
-    setSelectedCardId(null);
-    setState((current) => continueRun(current));
-  }, []);
+  const renderTitle = () => (
+    <TitleScreen onNewGame={() => setScreen("hero-select")} onQuit={handleQuit} />
+  );
 
-  return (
-    <div
-      className={`app-shell ${shakeToken % 2 === 1 ? "is-shaking" : ""}`}
-      style={{
-        "--theme-accent": theme.accent,
-        "--theme-surface": theme.surface,
-      }}
-    >
-      <header className="top-strip">
-        <div className="top-strip__brand">
-          <span className="eyebrow">DBG Demo</span>
-          <h1>The Indigestibles</h1>
-          <p>仿《杀戮尖塔》的胃肠道探险原型。当前先把职业机制、手牌手感和三层流程跑起来。</p>
-        </div>
-        <div className="top-strip__meta">
-          <div className="meta-chip">
-            <Leaf size={14} />
-            <span>{state.currentEncounter?.layerName}</span>
-          </div>
-          <div className="meta-chip">
-            <Sparkles size={14} />
-            <span>{state.currentEncounter?.name}</span>
-          </div>
-          <div className="meta-chip">
-            <Shield size={14} />
-            <span>HP {state.player.hp}/{state.player.maxHp}</span>
-          </div>
-          <div className="meta-chip">
-            <Swords size={14} />
-            <span>能量 {state.player.energy}</span>
-          </div>
-        </div>
-      </header>
+  const renderHeroSelect = () => (
+    <HeroSelectScreen
+      onConfirm={(classId, buildId) => startNewRun(classId, buildId)}
+      onBack={() => setScreen("title")}
+    />
+  );
 
-      <main className="main-grid">
-        <Sidebar
+  const renderMap = () => (
+    <MapScreen state={state} onNodeClick={enterNode} />
+  );
+
+  const renderNonCombat = () => {
+    if (screen === "shop") return <ShopScreen state={state} onLeave={completeNodeAndReturn} />;
+    if (screen === "event") return <EventScreen state={state} onLeave={completeNodeAndReturn} />;
+    if (screen === "campfire")
+      return (
+        <CampfireScreen
           state={state}
-          config={config}
-          onClassChange={handleClassChange}
-          onBuildChange={handleBuildChange}
-          onRestart={handleRestart}
+          onRest={handleCampfireRest}
+          onLeave={handleCampfireLeave}
         />
+      );
+    return null;
+  };
 
-        <section className="battle-column">
-          <div className="battle-surface">
-            <div className="battle-surface__copy">
-              <div>
-                <span className="eyebrow">当前遭遇</span>
-                <h2>{state.currentEncounter?.name}</h2>
-                <p>{state.currentEncounter?.note}</p>
-              </div>
-              {needsTarget && (
-                <div className="target-callout">
-                  <span>点击敌人来打出</span>
-                  <strong>{selectedCard?.name}</strong>
+  const renderCombat = () => {
+    const ClassIcon = classIcon(config.classId);
+
+    return (
+      <div
+        className={`app-shell ${shakeToken % 2 === 1 ? "is-shaking" : ""}`}
+        style={{
+          "--theme-accent": theme.accent,
+          "--theme-surface": theme.surface,
+        }}
+      >
+        <header className="top-strip">
+          <div className="top-strip__brand">
+            <span className="eyebrow">DBG Demo</span>
+            <h1>The Indigestibles</h1>
+            <p>仿《杀戮尖塔》的胃肠道探险原型。当前先把职业机制、手牌手感和三层流程跑起来。</p>
+          </div>
+          <div className="top-strip__meta">
+            <button
+              type="button"
+              className="meta-chip meta-chip--button"
+              onClick={() => setShowMapOverlay(true)}
+              disabled={isResolving}
+            >
+              <Map size={14} />
+              <span>显示地图</span>
+            </button>
+            <button
+              type="button"
+              className="meta-chip meta-chip--button"
+              onClick={restartRun}
+              disabled={isResolving}
+            >
+              <RotateCcw size={14} />
+              <span>重开这趟肠旅</span>
+            </button>
+          </div>
+        </header>
+
+        <main className="main-grid main-grid--combat">
+          <section className="battle-column">
+            <div className="battle-surface">
+              <div className="battle-surface__copy">
+                <div>
+                  <span className="eyebrow">当前遭遇</span>
+                  <h2>{state.currentEncounter?.name}</h2>
+                  <p>{state.currentEncounter?.note}</p>
                 </div>
-              )}
-            </div>
+                {needsTarget && (
+                  <div className="target-callout">
+                    <span>点击敌人来打出</span>
+                    <strong>{selectedCard?.name}</strong>
+                  </div>
+                )}
+              </div>
 
-            <div className="enemy-row">
-              {aliveEnemies.map((enemy) => (
-                <EnemyPanel
-                  key={enemy.instanceId}
-                  enemy={enemy}
-                  onTarget={() => onEnemyTarget(enemy.instanceId)}
-                  targeted={validTargets.includes(enemy.instanceId) && needsTarget}
-                  floaters={floaters}
-                />
-              ))}
-            </div>
+              <div className="battle-arena">
+                <div className="battle-arena__side battle-arena__side--player">
+                  <div className="player-combat-card">
+                    <FxFloaters floaters={floaters.player} />
+                    <BattleAvatar
+                      isPlayer
+                      classId={config.classId}
+                      color={hero.accent}
+                      glyph={hero.glyph}
+                      label={hero.name}
+                    />
+                    <div className="player-combat-card__info">
+                      <div className="player-combat-card__name">
+                        <strong>{hero.name}</strong>
+                        <span>{build.name}</span>
+                      </div>
+                      <div className="player-combat-card__stats">
+                        <span>格挡 {state.player.block}</span>
+                        <span>弃牌 {state.player.discard.length}</span>
+                        <span>牌库 {state.player.deck.length}</span>
+                      </div>
+                    </div>
+                  </div>
 
-            <div className="player-stage">
-              <div className="player-panel">
-                <FxFloaters floaters={floaters.player} />
-                <div className="player-panel__top">
-                  <Portrait glyph={hero.glyph} accent={hero.accent} label={hero.name} />
-                  <div className="player-panel__summary">
-                    <div className="player-panel__name">
-                      <strong>{hero.name}</strong>
-                      <span>{build.name}</span>
-                    </div>
-                    <p>{build.passive}</p>
-                    <div className="player-panel__stats">
-                      <span>格挡 {state.player.block}</span>
-                      <span>弃牌 {state.player.discard.length}</span>
-                      <span>牌库 {state.player.deck.length}</span>
-                    </div>
+                  {state.player.classId === "enoki" ? (
+                    <MiniColony minis={state.player.minis} floaters={floaters} />
+                  ) : (
+                    <TraitRack player={state.player} buildId={config.buildId} />
+                  )}
+                </div>
+
+                <div className="battle-arena__vs">
+                  <span>VS</span>
+                  <div className="battle-arena__turn">
+                    {state.phase === "player" && "你的回合"}
+                    {state.phase === "enemy" && "敌方回合"}
+                    {state.phase === "victory" && "胜利"}
+                    {state.phase === "defeat" && "失败"}
                   </div>
                 </div>
 
-                {state.player.classId === "enoki" ? (
-                  <MiniColony minis={state.player.minis} floaters={floaters} />
-                ) : (
-                  <TraitRack player={state.player} buildId={config.buildId} />
-                )}
-              </div>
-            </div>
-          </div>
-
-          <div className="hand-band">
-            <div className="hand-band__toolbar">
-              <div className="hand-band__title">
-                <span className="eyebrow">手牌区</span>
-                <strong>
-                  {state.phase === "player"
-                    ? `当前手牌 ${state.player.hand.length} 张`
-                    : state.phase === "victory"
-                    ? "遭遇已清空"
-                    : state.phase === "defeat"
-                    ? "本轮结束"
-                    : "敌方动作中"}
-                </strong>
-              </div>
-              <div className="hand-band__actions">
-                {state.phase === "player" && (
-                  <button type="button" className="action-button" onClick={handleEndTurn} disabled={isResolving}>
-                    <FastForward size={16} />
-                    <span>结束回合</span>
-                  </button>
-                )}
-                {(state.phase === "victory" || state.phase === "runComplete") && (
-                  <button type="button" className="action-button" onClick={handleContinue}>
-                    <FastForward size={16} />
-                    <span>{state.phase === "runComplete" ? "查看通关状态" : "继续下探"}</span>
-                  </button>
-                )}
-                {state.phase === "defeat" && (
-                  <button type="button" className="action-button" onClick={handleRestart}>
-                    <RotateCcw size={16} />
-                    <span>重新开局</span>
-                  </button>
-                )}
-              </div>
-            </div>
-            <HandFan
-              cards={state.player.hand}
-              selectedCardId={selectedCardId}
-              canPlayCard={canPlaySelectedCard}
-              onCardClick={onCardClick}
-            />
-          </div>
-        </section>
-
-        <aside className="side-rail side-rail--right">
-          <section className="rail-section">
-            <div className="rail-title">战斗摘要</div>
-            <div className="summary-grid">
-              <div className="summary-cell">
-                <span>层数</span>
-                <strong>{state.layerIndex + 1} / 3</strong>
-              </div>
-              <div className="summary-cell">
-                <span>遭遇</span>
-                <strong>{state.encounterIndex + 1}</strong>
-              </div>
-              <div className="summary-cell">
-                <span>回合</span>
-                <strong>{state.turn}</strong>
-              </div>
-              <div className="summary-cell">
-                <span>状态</span>
-                <strong>
-                  {state.phase === "player" && "你在动"}
-                  {state.phase === "enemy" && "肠道在动"}
-                  {state.phase === "victory" && "打完了"}
-                  {state.phase === "defeat" && "被消化了"}
-                  {state.phase === "runComplete" && "通关了"}
-                </strong>
-              </div>
-            </div>
-          </section>
-
-          <section className="rail-section">
-            <div className="rail-title">机制镜头</div>
-            {state.player.classId === "enoki" ? (
-              <div className="detail-copy">
-                <p>成熟小金针菇数量：{state.player.minis.filter((mini) => mini.ready).length}</p>
-                <p>已损失分身：{state.player.deadMinis}</p>
-                <p>护伞拦截层数：{state.player.status.bodyguardHits}</p>
-                <p>菌葬替死层数：{state.player.status.decoyReady}</p>
-              </div>
-            ) : (
-              <div className="detail-copy">
-                <p>当前壳芯：{state.player.currentTraitId ? TRAITS[state.player.currentTraitId].name : "空"}</p>
-                <p>专精层数：{state.player.focusChain || 0}</p>
-                <p>储存特性数：{state.player.traits.length}</p>
-                <p>反弹层：{state.player.status.retaliate}</p>
-              </div>
-            )}
-          </section>
-
-          <section className="rail-section rail-section--log">
-            <div className="rail-title">肠道播报</div>
-            <div className="log-feed">
-              {[...state.log].reverse().map((entry, index) => (
-                <div key={`${index}-${entry}`} className="log-line">
-                  {entry}
+                <div className="battle-arena__side battle-arena__side--enemies">
+                  {aliveEnemies.map((enemy) => (
+                    <EnemyPanel
+                      key={enemy.instanceId}
+                      enemy={enemy}
+                      onTarget={() => onEnemyTarget(enemy.instanceId)}
+                      targeted={validTargets.includes(enemy.instanceId) && needsTarget}
+                      floaters={floaters}
+                    />
+                  ))}
                 </div>
-              ))}
+              </div>
+            </div>
+
+            <div className="hand-band">
+              <div className="hand-band__hud hand-band__hud--left">
+                <div className="hud-chip">
+                  <Shield size={18} />
+                  <div>
+                    <span>HP</span>
+                    <strong>{state.player.hp}/{state.player.maxHp}</strong>
+                  </div>
+                </div>
+              </div>
+
+              <div className="hand-band__center">
+                <div className="hand-band__toolbar">
+                  <div className="hand-band__title">
+                    <span className="eyebrow">手牌区</span>
+                    <strong>
+                      {state.phase === "player"
+                        ? `当前手牌 ${state.player.hand.length} 张`
+                        : state.phase === "victory"
+                        ? "遭遇已清空"
+                        : state.phase === "defeat"
+                        ? "本轮结束"
+                        : "敌方动作中"}
+                    </strong>
+                  </div>
+                  <div className="hand-band__actions">
+                    {state.phase === "player" && (
+                      <button
+                        type="button"
+                        className="action-button"
+                        onClick={handleEndTurn}
+                        disabled={isResolving}
+                      >
+                        <FastForward size={16} />
+                        <span>结束回合</span>
+                      </button>
+                    )}
+                  </div>
+                </div>
+                <HandFan
+                  cards={state.player.hand}
+                  selectedCardId={selectedCardId}
+                  canPlayCard={canPlaySelectedCard}
+                  onCardClick={onCardClick}
+                />
+              </div>
+
+              <div className="hand-band__hud hand-band__hud--right">
+                <div className="hud-chip">
+                  <Swords size={18} />
+                  <div>
+                    <span>能量</span>
+                    <strong>{state.player.energy}/{state.player.maxEnergy}</strong>
+                  </div>
+                </div>
+              </div>
             </div>
           </section>
-        </aside>
-      </main>
+        </main>
 
-      {banner && (
-        <div className={`banner banner--${banner.tone}`}>
-          <strong>{banner.label}</strong>
-          {banner.sublabel && <span>{banner.sublabel}</span>}
+        {showMapOverlay && (
+          <div className="map-overlay" onClick={() => setShowMapOverlay(false)}>
+            <div className="map-overlay__card" onClick={(e) => e.stopPropagation()}>
+              <MapScreen state={state} onNodeClick={() => {}} />
+            </div>
+          </div>
+        )}
+
+        {banner && (
+          <div className={`banner banner--${banner.tone}`}>
+            <strong>{banner.label}</strong>
+            {banner.sublabel && <span>{banner.sublabel}</span>}
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  let content;
+  switch (screen) {
+    case "title":
+      content = renderTitle();
+      break;
+    case "hero-select":
+      content = renderHeroSelect();
+      break;
+    case "map":
+    case "shop":
+    case "event":
+    case "campfire":
+      content = (
+        <div
+          className="app-shell"
+          style={{
+            "--theme-accent": theme.accent,
+            "--theme-surface": theme.surface,
+          }}
+        >
+          <header className="top-strip">
+            <div className="top-strip__brand">
+              <span className="eyebrow">DBG Demo</span>
+              <h1>The Indigestibles</h1>
+            </div>
+            <div className="top-strip__meta">
+              <button
+                type="button"
+                className="meta-chip meta-chip--button"
+                onClick={() => setScreen("title")}
+              >
+                <span>返回主界面</span>
+              </button>
+            </div>
+          </header>
+          <main className="main-grid main-grid--fullscreen">{screen === "map" ? renderMap() : renderNonCombat()}</main>
         </div>
-      )}
-    </div>
-  );
+      );
+      break;
+    case "combat":
+      content = renderCombat();
+      break;
+    case "victory-modal":
+      content = <VictoryModal state={state} onConfirm={handleVictoryConfirm} />;
+      break;
+    case "defeat-modal":
+      content = <DefeatModal onConfirm={handleDefeatConfirm} />;
+      break;
+    default:
+      content = renderTitle();
+  }
+
+  return content;
 }
