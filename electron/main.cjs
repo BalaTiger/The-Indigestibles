@@ -1,12 +1,12 @@
-const { app, BrowserWindow, ipcMain } = require("electron");
+const { app, BrowserWindow, ipcMain, Menu } = require("electron");
 const path = require("node:path");
 
 let mainWindow = null;
 
 function createWindow() {
   mainWindow = new BrowserWindow({
-    width: 1280,
-    height: 800,
+    fullscreen: true,
+    autoHideMenuBar: true,
     minWidth: 1024,
     minHeight: 640,
     title: "The Indigestibles",
@@ -16,6 +16,8 @@ function createWindow() {
       nodeIntegration: false,
     },
   });
+
+  Menu.setApplicationMenu(null);
 
   if (process.env.VITE_DEV_SERVER_URL) {
     mainWindow.loadURL(process.env.VITE_DEV_SERVER_URL);

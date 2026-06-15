@@ -4,6 +4,24 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>The Indigestibles</title>
+    <script>
+      // 自适应缩放：以 1920x1080 为设计基准，等比缩放填满当前窗口
+      (function () {
+        const DESIGN_WIDTH = 1920;
+        const DESIGN_HEIGHT = 1080;
+        function updateScale() {
+          const sx = window.innerWidth / DESIGN_WIDTH;
+          const sy = window.innerHeight / DESIGN_HEIGHT;
+          const scale = Math.min(sx, sy);
+          document.documentElement.style.setProperty(
+            "--app-scale",
+            scale.toFixed(4)
+          );
+        }
+        updateScale();
+        window.addEventListener("resize", updateScale);
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>
