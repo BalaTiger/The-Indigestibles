@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { FastForward, Leaf, Map, RotateCcw, Shield, Shell, Sparkles, Swords } from "lucide-react";
-import { HEROES, TRAITS } from "./data/content";
+import { FastForward, Gem, Heart, LogOut, Map, Shield, X } from "lucide-react";
+import { HEROES, MAP_CONFIG, TRAITS } from "./data/content";
 import {
   advanceToLayer,
   createRunState,
@@ -26,6 +26,7 @@ import { HandFan } from "./components/HandFan";
 import { FxFloaters } from "./components/FxLayer";
 import { EnemyPanel } from "./components/EnemyPanel";
 import { BattleAvatar } from "./components/BattleAvatar";
+import { StatChip } from "./components/StatChip";
 import { TitleScreen } from "./screens/TitleScreen";
 import { HeroSelectScreen } from "./screens/HeroSelectScreen";
 import { MapScreen } from "./screens/MapScreen";
@@ -43,32 +44,89 @@ function makeTargetKey(kind, id) {
   return `${kind}:${id}`;
 }
 
-function classIcon(classId) {
-  return classId === "enoki" ? Leaf : Shell;
+function PileButton({ type, count, onClick }) {
+  return (
+    <button type="button" className={`pile-button pile-button--${type}`} onClick={onClick}>
+      <span className="pile-button__art" />
+      <span className="pile-button__label">{type === "deck" ? "牌库" : "弃牌"}</span>
+      <strong>{count}</strong>
+    </button>
+  );
+}
+
+function CardFlowLayer({ flows }) {
+  if (!flows.length) return null;
+  return (
+    <div className="card-flow-layer">
+      {flows.map((flow) => (
+        <div
+          key={flow.id}
+          className={`flow-card flow-card--${flow.kind}`}
+          style={{ "--flow-delay": `${flow.index * 110}ms` }}
+        >
+          <span>{flow.card.cost}</span>
+          <strong>{flow.card.name}</strong>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function DiscardModal({ cards, onClose }) {
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="discard-modal" onClick={(e) => e.stopPropagation()}>
+        <button type="button" className="discard-modal__close" onClick={onClose} aria-label="关闭弃牌堆">
+          <X size={18} />
+        </button>
+        <strong>弃牌堆</strong>
+        <div className="discard-modal__grid">
+          {cards.length ? (
+            cards.map((card) => (
+              <div key={card.instanceId} className="discard-card">
+                <span>{card.cost}</span>
+                <strong>{card.name}</strong>
+                <small>{card.description}</small>
+              </div>
+            ))
+          ) : (
+            <p>还没有弃牌。</p>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function QuitRunButton({ onClick, disabled }) {
+  return (
+    <button
+      type="button"
+      className="meta-chip meta-chip--button"
+      onClick={onClick}
+      disabled={disabled}
+    >
+      <LogOut size={14} />
+      <span>结束这段肠旅</span>
+    </button>
+  );
 }
 
 function MiniColony({ minis, floaters }) {
   return (
     <div className="mini-colony">
-      {minis.length ? (
-        minis.map((mini) => (
-          <div key={mini.id} className={`mini-unit ${mini.ready ? "is-ready" : ""}`}>
-            <FxFloaters floaters={floaters[makeTargetKey("mini", mini.id)]} />
-            <div className="mini-unit__cap" />
-            <div className="mini-unit__meta">
-              <span>HP {mini.hp}</span>
-              <span>G {mini.growth}</span>
-            </div>
-          </div>
-        ))
-      ) : (
-        <div className="mini-colony__empty">还没有小金针菇落地。</div>
-      )}
+      {minis.map((mini) => (
+        <div key={mini.id} className={`mini-unit ${mini.ready ? "is-ready" : ""}`}>
+          <FxFloaters floaters={floaters[makeTargetKey("mini", mini.id)]} />
+          <BattleAvatar isPlayer classId="mini-enoki" color="#d4d785" glyph="" label="" />
+          <div className="mini-unit__meta">HP {mini.hp}</div>
+        </div>
+      ))}
     </div>
   );
 }
 
-function TraitRack({ player, buildId }) {
+function TraitRack({ player }) {
   if (player.classId !== "macadamia") {
     return null;
   }
@@ -87,9 +145,7 @@ function TraitRack({ player, buildId }) {
             >
               <span className="trait-chip__sigil">{trait.short}</span>
               <span className="trait-chip__name">{trait.name}</span>
-              <span className="trait-chip__count">
-                {buildId === "focus" ? `专精 ${player.focusChain || 1}` : `储层 ${entry.stacks}`}
-              </span>
+              <span className="trait-chip__count">储层 {entry.stacks}</span>
             </div>
           );
         })
@@ -104,15 +160,20 @@ export default function App() {
   const [screen, setScreen] = useState("title");
   const [config, setConfig] = useState({
     classId: "enoki",
-    buildId: "guardian",
+    buildId: null,
   });
   const [state, setState] = useState(() => createRunState(config));
   const [selectedCardId, setSelectedCardId] = useState(null);
   const [floaters, setFloaters] = useState({});
   const [banner, setBanner] = useState(null);
+  const [cardFlows, setCardFlows] = useState([]);
+  const [avatarActions, setAvatarActions] = useState({});
+  const [discardOpen, setDiscardOpen] = useState(false);
   const [isResolving, setIsResolving] = useState(false);
   const [shakeToken, setShakeToken] = useState(0);
   const [showMapOverlay, setShowMapOverlay] = useState(false);
+  const [hoveredCardCost, setHoveredCardCost] = useState(null);
+  const [showQuitConfirm, setShowQuitConfirm] = useState(false);
   const stateRef = useRef(state);
 
   useEffect(() => {
@@ -121,11 +182,53 @@ export default function App() {
 
   const theme = getCurrentTheme(state);
   const hero = HEROES[config.classId];
-  const build = hero.builds[config.buildId];
+  const currentNode = getCurrentNode(state);
+  const currentLayer = getCurrentLayer(state);
+  const levelLabel = currentLayer && currentNode
+    ? `${currentLayer.name}-${MAP_CONFIG.nodeTypeNames[currentNode.type] || currentNode.type}`
+    : "";
   const aliveEnemies = state.enemies.filter((enemy) => enemy.hp > 0);
   const selectedCard = state.player.hand.find((card) => card.instanceId === selectedCardId) || null;
   const validTargets = useMemo(() => getValidTargets(state, selectedCard), [state, selectedCard]);
   const needsTarget = selectedCard?.target === "enemy";
+  const traitPreview = useMemo(() => {
+    if (config.classId !== "macadamia") return null;
+    const firstEnemy = aliveEnemies[0];
+    if (!firstEnemy) return null;
+    return TRAITS[firstEnemy.traitId] || null;
+  }, [config.classId, aliveEnemies]);
+
+  const handleCardMouseEnter = useCallback((card) => {
+    setHoveredCardCost(card.cost);
+  }, []);
+
+  const handleCardMouseLeave = useCallback(() => {
+    setHoveredCardCost(null);
+  }, []);
+
+  const showCardFlow = useCallback((kind, cards) => {
+    const flows = cards.map((card, index) => ({
+      id: `${kind}-${card.instanceId}-${Date.now()}-${index}`,
+      card,
+      kind,
+      index,
+    }));
+    setCardFlows((current) => [...current, ...flows]);
+    window.setTimeout(() => {
+      setCardFlows((current) => current.filter((flow) => !flows.some((item) => item.id === flow.id)));
+    }, 1250 + flows.length * 120);
+  }, []);
+
+  const triggerAvatarAction = useCallback((actorId) => {
+    setAvatarActions((current) => ({ ...current, [actorId]: "attack" }));
+    window.setTimeout(() => {
+      setAvatarActions((current) => {
+        const next = { ...current };
+        delete next[actorId];
+        return next;
+      });
+    }, 720);
+  }, []);
 
   const appendFloaters = useCallback((target, text, tone) => {
     const key = target;
@@ -154,9 +257,15 @@ export default function App() {
         if (event.type === "shake") {
           setShakeToken((token) => token + 1);
         }
+        if (event.type === "cardFlow") {
+          showCardFlow(event.kind, event.cards);
+        }
+        if (event.type === "actorAction") {
+          triggerAvatarAction(event.actorId);
+        }
       });
     },
-    [appendFloaters],
+    [appendFloaters, showCardFlow, triggerAvatarAction],
   );
 
   useEffect(() => {
@@ -167,8 +276,8 @@ export default function App() {
     return () => window.clearTimeout(timer);
   }, [banner]);
 
-  const startNewRun = useCallback((classId, buildId) => {
-    const nextConfig = { classId, buildId };
+  const startNewRun = useCallback((classId) => {
+    const nextConfig = { classId, buildId: null };
     setConfig(nextConfig);
     const runState = createRunState(nextConfig);
     const layer = getCurrentLayer(runState);
@@ -179,8 +288,13 @@ export default function App() {
   }, []);
 
   const restartRun = useCallback(() => {
-    startNewRun(config.classId, config.buildId);
+    startNewRun(config.classId);
   }, [config, startNewRun]);
+
+  const handleQuitRun = useCallback(() => {
+    setShowQuitConfirm(false);
+    setScreen("defeat-modal");
+  }, []);
 
   const enterNode = useCallback(
     (node) => {
@@ -296,6 +410,7 @@ export default function App() {
       setState(nextState);
       handleReport(report);
       setSelectedCardId(null);
+      setHoveredCardCost(null);
       await wait(450);
       setIsResolving(false);
 
@@ -341,6 +456,7 @@ export default function App() {
     setState(endResult.nextState);
     handleReport(endResult.report);
     setSelectedCardId(null);
+    setHoveredCardCost(null);
     await wait(500);
 
     let workingState = endResult.nextState;
@@ -374,7 +490,7 @@ export default function App() {
 
   const renderHeroSelect = () => (
     <HeroSelectScreen
-      onConfirm={(classId, buildId) => startNewRun(classId, buildId)}
+      onConfirm={(classId) => startNewRun(classId)}
       onBack={() => setScreen("title")}
     />
   );
@@ -398,8 +514,6 @@ export default function App() {
   };
 
   const renderCombat = () => {
-    const ClassIcon = classIcon(config.classId);
-
     return (
       <div
         className={`app-shell ${shakeToken % 2 === 1 ? "is-shaking" : ""}`}
@@ -410,9 +524,7 @@ export default function App() {
       >
         <header className="top-strip">
           <div className="top-strip__brand">
-            <span className="eyebrow">DBG Demo</span>
-            <h1>The Indigestibles</h1>
-            <p>仿《杀戮尖塔》的胃肠道探险原型。当前先把职业机制、手牌手感和三层流程跑起来。</p>
+            <span className="level-badge">{levelLabel}</span>
           </div>
           <div className="top-strip__meta">
             <button
@@ -424,15 +536,7 @@ export default function App() {
               <Map size={14} />
               <span>显示地图</span>
             </button>
-            <button
-              type="button"
-              className="meta-chip meta-chip--button"
-              onClick={restartRun}
-              disabled={isResolving}
-            >
-              <RotateCcw size={14} />
-              <span>重开这趟肠旅</span>
-            </button>
+            <QuitRunButton onClick={() => setShowQuitConfirm(true)} disabled={isResolving} />
           </div>
         </header>
 
@@ -440,11 +544,6 @@ export default function App() {
           <section className="battle-column">
             <div className="battle-surface">
               <div className="battle-surface__copy">
-                <div>
-                  <span className="eyebrow">当前遭遇</span>
-                  <h2>{state.currentEncounter?.name}</h2>
-                  <p>{state.currentEncounter?.note}</p>
-                </div>
                 {needsTarget && (
                   <div className="target-callout">
                     <span>点击敌人来打出</span>
@@ -463,24 +562,19 @@ export default function App() {
                       color={hero.accent}
                       glyph={hero.glyph}
                       label={hero.name}
+                      action={avatarActions.player}
+                      plain
                     />
                     <div className="player-combat-card__info">
-                      <div className="player-combat-card__name">
-                        <strong>{hero.name}</strong>
-                        <span>{build.name}</span>
-                      </div>
-                      <div className="player-combat-card__stats">
-                        <span>格挡 {state.player.block}</span>
-                        <span>弃牌 {state.player.discard.length}</span>
-                        <span>牌库 {state.player.deck.length}</span>
-                      </div>
+                      <StatChip icon={Heart} label="HP" value={`${state.player.hp}/${state.player.maxHp}`} />
+                      <StatChip icon={Shield} label="格挡" value={state.player.block} />
                     </div>
                   </div>
 
                   {state.player.classId === "enoki" ? (
                     <MiniColony minis={state.player.minis} floaters={floaters} />
                   ) : (
-                    <TraitRack player={state.player} buildId={config.buildId} />
+                    <TraitRack player={state.player} />
                   )}
                 </div>
 
@@ -502,21 +596,25 @@ export default function App() {
                       onTarget={() => onEnemyTarget(enemy.instanceId)}
                       targeted={validTargets.includes(enemy.instanceId) && needsTarget}
                       floaters={floaters}
+                      action={avatarActions[enemy.instanceId]}
                     />
                   ))}
                 </div>
               </div>
             </div>
 
+            <div className="battle-energy">
+              <Gem size={22} />
+              <strong>{state.player.energy}</strong>
+              {hoveredCardCost !== null && (
+                <span className="battle-energy__preview">-{hoveredCardCost}</span>
+              )}
+              <span>/ {state.player.maxEnergy}</span>
+            </div>
+
             <div className="hand-band">
               <div className="hand-band__hud hand-band__hud--left">
-                <div className="hud-chip">
-                  <Shield size={18} />
-                  <div>
-                    <span>HP</span>
-                    <strong>{state.player.hp}/{state.player.maxHp}</strong>
-                  </div>
-                </div>
+                <PileButton type="deck" count={state.player.deck.length} />
               </div>
 
               <div className="hand-band__center">
@@ -552,17 +650,14 @@ export default function App() {
                   selectedCardId={selectedCardId}
                   canPlayCard={canPlaySelectedCard}
                   onCardClick={onCardClick}
+                  onCardMouseEnter={handleCardMouseEnter}
+                  onCardMouseLeave={handleCardMouseLeave}
+                  traitPreview={traitPreview}
                 />
               </div>
 
               <div className="hand-band__hud hand-band__hud--right">
-                <div className="hud-chip">
-                  <Swords size={18} />
-                  <div>
-                    <span>能量</span>
-                    <strong>{state.player.energy}/{state.player.maxEnergy}</strong>
-                  </div>
-                </div>
+                <PileButton type="discard" count={state.player.discard.length} onClick={() => setDiscardOpen(true)} />
               </div>
             </div>
           </section>
@@ -582,6 +677,8 @@ export default function App() {
             {banner.sublabel && <span>{banner.sublabel}</span>}
           </div>
         )}
+        <CardFlowLayer flows={cardFlows} />
+        {discardOpen && <DiscardModal cards={state.player.discard} onClose={() => setDiscardOpen(false)} />}
       </div>
     );
   };
@@ -612,13 +709,7 @@ export default function App() {
               <h1>The Indigestibles</h1>
             </div>
             <div className="top-strip__meta">
-              <button
-                type="button"
-                className="meta-chip meta-chip--button"
-                onClick={() => setScreen("title")}
-              >
-                <span>返回主界面</span>
-              </button>
+              <QuitRunButton onClick={() => setShowQuitConfirm(true)} />
             </div>
           </header>
           <main className="main-grid main-grid--fullscreen">{screen === "map" ? renderMap() : renderNonCombat()}</main>
@@ -638,5 +729,29 @@ export default function App() {
       content = renderTitle();
   }
 
-  return content;
+  return (
+    <>
+      {content}
+      {showQuitConfirm && (
+        <div className="modal-overlay">
+          <div className="modal-card">
+            <strong>结束这段肠旅</strong>
+            <p>确定要放弃当前进度并进入结算吗？</p>
+            <div className="modal-card__actions">
+              <button type="button" className="action-button" onClick={handleQuitRun}>
+                确认
+              </button>
+              <button
+                type="button"
+                className="action-button action-button--ghost"
+                onClick={() => setShowQuitConfirm(false)}
+              >
+                取消
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
+  );
 }

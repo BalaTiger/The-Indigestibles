@@ -39,14 +39,20 @@ export function CardView({
   playable,
   layoutStyle,
   onClick,
+  onMouseEnter,
+  onMouseLeave,
+  traitPreview,
 }) {
   const palette = paletteMap[card.palette] || paletteMap.enoki;
+  const showTrait = traitPreview && card.key === "crack-and-seal";
 
   return (
     <button
       type="button"
       className={`game-card ${selected ? "is-selected" : ""} ${playable ? "is-playable" : "is-disabled"}`}
       onClick={onClick}
+      onMouseEnter={onMouseEnter}
+      onMouseLeave={onMouseLeave}
       style={{
         ...layoutStyle,
         "--card-edge": palette.edge,
@@ -58,6 +64,15 @@ export function CardView({
       <span className="game-card__suite">{card.suite === "attack" ? "攻击" : "技能"}</span>
       <div className="game-card__name">{card.name}</div>
       <div className="game-card__text">{card.description}</div>
+      {showTrait && (
+        <div className="game-card__trait" style={{ "--trait-color": traitPreview.color }}>
+          <span>{traitPreview.short}</span>
+          <div>
+            <strong>{traitPreview.name}</strong>
+            <small>{traitPreview.description}</small>
+          </div>
+        </div>
+      )}
       <div className="game-card__footer">
         <span>{card.target === "enemy" ? "选敌" : "即时"}</span>
         <span>{card.instanceId.split("-").slice(-1)[0]}</span>

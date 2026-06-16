@@ -1,6 +1,9 @@
 import React from "react";
+import { Heart, Shield, Sword } from "lucide-react";
 import { BattleAvatar } from "./BattleAvatar";
 import { FxFloaters } from "./FxLayer";
+import { StatChip } from "./StatChip";
+import { FanSwordsIcon } from "./FanSwordsIcon";
 import { TRAITS } from "../data/content";
 
 function intentTone(intent) {
@@ -10,11 +13,18 @@ function intentTone(intent) {
   return "attack";
 }
 
+function renderIntentIcon(intent) {
+  const tone = intentTone(intent);
+  if (tone === "guard") return <Shield size={26} />;
+  if (tone === "burst") return <FanSwordsIcon size={26} />;
+  return <Sword size={26} />;
+}
+
 function makeTargetKey(kind, id) {
   return `${kind}:${id}`;
 }
 
-export function EnemyPanel({ enemy, onTarget, targeted, floaters }) {
+export function EnemyPanel({ enemy, onTarget, targeted, floaters, action }) {
   const trait = TRAITS[enemy.traitId];
 
   return (
@@ -25,43 +35,27 @@ export function EnemyPanel({ enemy, onTarget, targeted, floaters }) {
       style={{ "--trait-color": trait?.color || "#cda16d" }}
     >
       <FxFloaters floaters={floaters[makeTargetKey("enemy", enemy.instanceId)]} />
-      <BattleAvatar
-        isPlayer={false}
-        traitId={enemy.traitId}
-        color={trait?.color}
-        glyph={enemy.glyph}
-        label={enemy.name}
-        targeted={targeted}
-      />
+
+      <div className="enemy-panel__avatar-wrap">
+        <div className={`enemy-panel__intent enemy-panel__intent--${intentTone(enemy.intent)}`}>
+          {renderIntentIcon(enemy.intent)}
+        </div>
+        <BattleAvatar
+          isPlayer={false}
+          traitId={enemy.traitId}
+          color={trait?.color}
+          glyph={enemy.glyph}
+          label={enemy.name}
+          targeted={targeted}
+          action={action}
+          plain
+        />
+      </div>
 
       <div className="enemy-panel__body">
         <div className="enemy-panel__stats">
-          <div>
-            <strong>{enemy.hp}</strong>
-            <span>/ {enemy.maxHp}</span>
-          </div>
-          <div>格挡 {enemy.block}</div>
-        </div>
-
-        <div className={`intent-badge intent-badge--${intentTone(enemy.intent)}`}>
-          <span>{enemy.intent.label}</span>
-          <small>
-            {enemy.intent.type === "guard"
-              ? `+${enemy.intent.value} 壳`
-              : enemy.intent.type === "attackAll"
-              ? `${enemy.intent.value} / 全体`
-              : enemy.intent.type === "miniSweep"
-              ? `${enemy.intent.value} / 菌群`
-              : `${enemy.intent.value ?? enemy.intent.guard ?? 0}`}
-          </small>
-        </div>
-
-        <div className="enemy-panel__trait">
-          <span>{trait?.short}</span>
-          <div>
-            <strong>{trait?.name}</strong>
-            <small>{trait?.description}</small>
-          </div>
+          <StatChip icon={Heart} label="HP" value={`${enemy.hp}/${enemy.maxHp}`} />
+          <StatChip icon={Shield} label="格挡" value={enemy.block} />
         </div>
       </div>
     </button>

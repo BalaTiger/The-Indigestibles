@@ -6,7 +6,7 @@ import {
   getEnemyBlueprint,
   getStarterDeck,
   pickLargeBoss,
-} from "../data/content";
+} from "../data/content.js";
 
 function shuffleArray(array) {
   const copy = [...array];
@@ -245,7 +245,7 @@ function makePlayer(classId, buildId) {
   };
 }
 
-export function createRunState({ classId = "enoki", buildId = "guardian" } = {}) {
+export function createRunState({ classId = "enoki", buildId = null } = {}) {
   const hero = HEROES[classId];
   const finalBossId = pickLargeBoss(rng());
   const layers = [0, 1, 2].map((layerIndex) => {

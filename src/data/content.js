@@ -430,66 +430,38 @@ const ENEMY_LIBRARY = {
 };
 
 const STARTER_DECKS = {
-  enoki: {
-    guardian: [
-      "cap-jab",
-      "cap-jab",
-      "split-cluster",
-      "split-cluster",
-      "tender-guard",
-      "tender-guard",
-      "mycelial-shelter",
-      "mycelial-shelter",
-      "patient-canopy",
-      "patient-canopy",
-    ],
-    martyr: [
-      "cap-jab",
-      "cap-jab",
-      "split-cluster",
-      "split-cluster",
-      "tender-guard",
-      "tender-guard",
-      "butter-pyre",
-      "butter-pyre",
-      "funeral-bloom",
-      "funeral-bloom",
-    ],
-  },
-  macadamia: {
-    focus: [
-      "shell-bash",
-      "shell-bash",
-      "crack-and-seal",
-      "crack-and-seal",
-      "kernel-recall",
-      "kernel-recall",
-      "mono-resonance",
-      "mono-resonance",
-      "pressure-polish",
-      "pressure-polish",
-    ],
-    kaleidoscope: [
-      "shell-bash",
-      "shell-bash",
-      "crack-and-seal",
-      "crack-and-seal",
-      "kernel-recall",
-      "kernel-recall",
-      "trait-carousel",
-      "trait-carousel",
-      "pantry-choir",
-      "pantry-choir",
-    ],
-  },
+  enoki: [
+    "cap-jab",
+    "cap-jab",
+    "cap-jab",
+    "cap-jab",
+    "split-cluster",
+    "split-cluster",
+    "split-cluster",
+    "tender-guard",
+    "tender-guard",
+    "tender-guard",
+  ],
+  macadamia: [
+    "shell-bash",
+    "shell-bash",
+    "shell-bash",
+    "shell-bash",
+    "crack-and-seal",
+    "crack-and-seal",
+    "crack-and-seal",
+    "kernel-recall",
+    "kernel-recall",
+    "kernel-recall",
+  ],
 };
 
 export function getCardDefinition(key) {
   return CARD_LIBRARY[key];
 }
 
-export function getStarterDeck(classId, buildId) {
-  return STARTER_DECKS[classId][buildId].map((key) => CARD_LIBRARY[key]);
+export function getStarterDeck(classId) {
+  return STARTER_DECKS[classId].map((key) => CARD_LIBRARY[key]);
 }
 
 export function getEnemyBlueprint(id) {

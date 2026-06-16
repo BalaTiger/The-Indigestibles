@@ -6,6 +6,9 @@ export function HandFan({
   selectedCardId,
   canPlayCard,
   onCardClick,
+  onCardMouseEnter,
+  onCardMouseLeave,
+  traitPreview,
 }) {
   const count = cards.length;
   const spread = count <= 1 ? 0 : Math.min(15, 54 / Math.max(1, count - 1));
@@ -27,6 +30,9 @@ export function HandFan({
             selected={selectedCardId === card.instanceId}
             playable={canPlayCard(card)}
             onClick={() => onCardClick(card)}
+            onMouseEnter={() => onCardMouseEnter?.(card)}
+            onMouseLeave={() => onCardMouseLeave?.(card)}
+            traitPreview={traitPreview}
             layoutStyle={{
               "--card-x": `${x}px`,
               "--card-y": `${y}px`,

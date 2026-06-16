@@ -1,141 +1,132 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 
-function HeroEnokiAvatar({ accent }) {
+function useShowcaseAttack(enabled) {
+  const [attacking, setAttacking] = useState(false);
+
+  useEffect(() => {
+    if (!enabled) return undefined;
+    let timer;
+    let alive = true;
+    const schedule = () => {
+      timer = window.setTimeout(() => {
+        if (!alive) return;
+        setAttacking(true);
+        window.setTimeout(() => setAttacking(false), 720);
+        schedule();
+      }, 3000 + Math.random() * 3000);
+    };
+    schedule();
+    return () => {
+      alive = false;
+      window.clearTimeout(timer);
+    };
+  }, [enabled]);
+
+  return attacking;
+}
+
+function EnokiFigure() {
   return (
-    <svg viewBox="0 0 120 160" className="battle-avatar__svg">
-      <g className="battle-avatar__silhouette">
-        <ellipse cx="60" cy="38" rx="34" ry="22" fill={accent} opacity="0.9" />
-        <rect x="48" y="54" width="24" height="70" rx="10" fill={accent} opacity="0.7" />
-        <path d="M48 110 Q36 140 30 152" stroke={accent} strokeWidth="4" fill="none" opacity="0.6" />
-        <path d="M72 110 Q84 140 90 152" stroke={accent} strokeWidth="4" fill="none" opacity="0.6" />
-        <path d="M54 120 Q50 145 46 156" stroke={accent} strokeWidth="3" fill="none" opacity="0.5" />
-        <path d="M66 120 Q70 145 74 156" stroke={accent} strokeWidth="3" fill="none" opacity="0.5" />
+    <svg viewBox="0 0 160 180" className="battle-avatar__svg">
+      <g className="avatar-shadow"><ellipse cx="80" cy="158" rx="48" ry="10" /></g>
+      <g className="avatar-body avatar-body--enoki">
+        <path className="avatar-limb avatar-limb--left" d="M63 103 C48 118 39 137 32 160" />
+        <path className="avatar-limb avatar-limb--right" d="M97 103 C112 118 121 137 128 160" />
+        <path className="avatar-limb avatar-limb--thin-left" d="M73 111 C67 128 63 147 58 168" />
+        <path className="avatar-limb avatar-limb--thin-right" d="M87 111 C93 128 97 147 102 168" />
+        <path className="avatar-stem" d="M65 59 C54 86 57 125 69 150 C74 161 86 161 91 150 C103 124 106 86 95 59 Z" />
+        <path className="avatar-cap" d="M31 58 C40 25 67 15 84 21 C105 13 133 30 136 60 C112 74 58 76 31 58 Z" />
+        <path className="avatar-cap-mark" d="M50 51 C66 43 96 43 116 52" />
+        <circle className="avatar-eye" cx="68" cy="78" r="4" />
+        <circle className="avatar-eye" cx="91" cy="78" r="4" />
       </g>
     </svg>
   );
 }
 
-function HeroMacadamiaAvatar({ accent }) {
+function MiniEnokiFigure() {
   return (
-    <svg viewBox="0 0 120 160" className="battle-avatar__svg">
-      <g className="battle-avatar__silhouette">
-        <circle cx="60" cy="80" r="46" fill={accent} opacity="0.85" />
-        <path d="M38 58 L82 102" stroke="#2b1d14" strokeWidth="4" opacity="0.5" />
-        <path d="M82 58 L38 102" stroke="#2b1d14" strokeWidth="4" opacity="0.5" />
-        <circle cx="60" cy="80" r="18" fill="none" stroke="#2b1d14" strokeWidth="3" opacity="0.4" />
+    <svg viewBox="0 0 120 120" className="battle-avatar__svg">
+      <g className="avatar-shadow"><ellipse cx="60" cy="106" rx="30" ry="7" /></g>
+      <g className="avatar-body avatar-body--mini">
+        <path className="avatar-stem" d="M50 45 C43 66 46 91 55 103 C59 108 65 108 69 103 C78 91 80 66 70 45 Z" />
+        <path className="avatar-cap" d="M27 47 C34 25 51 18 62 22 C76 16 95 29 97 49 C78 60 45 60 27 47 Z" />
+        <circle className="avatar-eye" cx="54" cy="65" r="3" />
+        <circle className="avatar-eye" cx="67" cy="65" r="3" />
       </g>
     </svg>
   );
 }
 
-function EnemyAvatar({ traitId, color }) {
-  const base = color || "#cda16d";
-
-  const shape = (() => {
-    switch (traitId) {
-      case "acidSplash":
-        return (
-          <>
-            <circle cx="60" cy="70" r="40" fill={base} opacity="0.85" />
-            <circle cx="44" cy="58" r="8" fill="#fff8ee" opacity="0.6" />
-            <circle cx="76" cy="58" r="8" fill="#fff8ee" opacity="0.6" />
-            <path d="M40 90 Q60 110 80 90" stroke="#fff8ee" strokeWidth="4" fill="none" opacity="0.5" />
-          </>
-        );
-      case "mucusWrap":
-        return (
-          <>
-            <ellipse cx="60" cy="80" rx="44" ry="38" fill={base} opacity="0.8" />
-            <path d="M30 70 Q60 50 90 70" stroke="#fff8ee" strokeWidth="3" fill="none" opacity="0.4" />
-            <path d="M30 90 Q60 110 90 90" stroke="#fff8ee" strokeWidth="3" fill="none" opacity="0.4" />
-          </>
-        );
-      case "bileJet":
-        return (
-          <>
-            <polygon points="60,30 95,120 60,105 25,120" fill={base} opacity="0.85" />
-            <circle cx="60" cy="60" r="10" fill="#fff8ee" opacity="0.6" />
-          </>
-        );
-      case "villusSnare":
-        return (
-          <>
-            <circle cx="60" cy="80" r="36" fill={base} opacity="0.85" />
-            {Array.from({ length: 8 }, (_, i) => {
-              const angle = (i / 8) * Math.PI * 2;
-              const x1 = 60 + Math.cos(angle) * 36;
-              const y1 = 80 + Math.sin(angle) * 36;
-              const x2 = 60 + Math.cos(angle) * 52;
-              const y2 = 80 + Math.sin(angle) * 52;
-              return <line key={i} x1={x1} y1={y1} x2={x2} y2={y2} stroke={base} strokeWidth="4" opacity="0.7" />;
-            })}
-          </>
-        );
-      case "gasBurst":
-        return (
-          <>
-            <circle cx="60" cy="80" r="42" fill={base} opacity="0.75" />
-            <circle cx="44" cy="64" r="10" fill="#fff8ee" opacity="0.3" />
-            <circle cx="78" cy="76" r="14" fill="#fff8ee" opacity="0.25" />
-            <circle cx="54" cy="100" r="8" fill="#fff8ee" opacity="0.3" />
-          </>
-        );
-      case "clotClamp":
-        return (
-          <>
-            <rect x="28" y="48" width="64" height="64" rx="18" fill={base} opacity="0.85" />
-            <rect x="48" y="44" width="24" height="72" rx="6" fill="#fff8ee" opacity="0.3" />
-          </>
-        );
-      case "dryPlug":
-        return (
-          <>
-            <rect x="42" y="34" width="36" height="92" rx="10" fill={base} opacity="0.85" />
-            <rect x="36" y="34" width="48" height="18" rx="4" fill="#fff8ee" opacity="0.4" />
-          </>
-        );
-      case "putridRush":
-        return (
-          <>
-            <circle cx="60" cy="80" r="40" fill={base} opacity="0.8" />
-            <circle cx="45" cy="65" r="8" fill="#fff8ee" opacity="0.4" />
-            <circle cx="75" cy="85" r="10" fill="#fff8ee" opacity="0.35" />
-            <circle cx="55" cy="100" r="6" fill="#fff8ee" opacity="0.4" />
-          </>
-        );
-      default:
-        return <circle cx="60" cy="80" r="40" fill={base} opacity="0.8" />;
-    }
-  })();
-
+function MacadamiaFigure() {
   return (
-    <svg viewBox="0 0 120 160" className="battle-avatar__svg">
-      <g className="battle-avatar__silhouette">{shape}</g>
+    <svg viewBox="0 0 160 180" className="battle-avatar__svg">
+      <g className="avatar-shadow"><ellipse cx="82" cy="158" rx="50" ry="11" /></g>
+      <g className="avatar-body avatar-body--macadamia">
+        <path className="avatar-shell" d="M80 28 C117 28 136 58 131 94 C126 135 100 155 75 150 C45 145 26 117 29 82 C32 49 52 28 80 28 Z" />
+        <path className="avatar-crack" d="M58 52 C80 72 87 91 76 125" />
+        <path className="avatar-crack avatar-crack--small" d="M92 52 C84 72 88 87 105 109" />
+        <circle className="avatar-core" cx="77" cy="91" r="20" />
+        <circle className="avatar-eye" cx="64" cy="82" r="4" />
+        <circle className="avatar-eye" cx="93" cy="78" r="4" />
+      </g>
     </svg>
   );
 }
 
-export function BattleAvatar({ entity, isPlayer, classId, traitId, color, glyph, label, targeted }) {
+function EnemyFigure({ traitId }) {
+  return (
+    <svg viewBox="0 0 160 180" className="battle-avatar__svg">
+      <g className="avatar-shadow"><ellipse cx="80" cy="158" rx="52" ry="11" /></g>
+      <g className={`avatar-body avatar-body--enemy avatar-body--${traitId || "food"}`}>
+        <path className="enemy-blob" d="M81 25 C113 25 134 49 134 82 C134 121 109 151 76 149 C45 147 25 118 28 83 C31 48 51 25 81 25 Z" />
+        <path className="enemy-fold enemy-fold--a" d="M45 70 C63 56 96 55 116 70" />
+        <path className="enemy-fold enemy-fold--b" d="M43 105 C63 119 99 119 118 100" />
+        <circle className="avatar-eye" cx="64" cy="78" r="5" />
+        <circle className="avatar-eye" cx="95" cy="78" r="5" />
+        <path className="enemy-mouth" d="M61 105 C72 115 90 115 101 102" />
+        <path className="enemy-spike enemy-spike--a" d="M40 43 L24 30" />
+        <path className="enemy-spike enemy-spike--b" d="M121 44 L139 33" />
+      </g>
+    </svg>
+  );
+}
+
+export function BattleAvatar({
+  isPlayer,
+  classId,
+  traitId,
+  color,
+  glyph,
+  label,
+  targeted,
+  selected,
+  action,
+  showcase,
+  plain,
+}) {
+  const showcaseAttack = useShowcaseAttack(showcase);
   const accent = color || "#d4d785";
+  const attacking = action === "attack" || showcaseAttack;
+  const variant = isPlayer ? classId : `enemy-${traitId || "food"}`;
 
   return (
     <div
-      className={`battle-avatar ${targeted ? "is-targeted" : ""}`}
+      className={`battle-avatar battle-avatar--${variant} ${attacking ? "is-attacking" : ""} ${
+        targeted ? "is-targeted" : ""
+      } ${selected ? "is-selected" : ""} ${plain ? "is-plain" : ""}`}
       style={{ "--avatar-accent": accent }}
     >
       <div className="battle-avatar__frame">
-        {isPlayer ? (
-          classId === "enoki" ? (
-            <HeroEnokiAvatar accent={accent} />
+        <div className="battle-avatar__figure">
+          {isPlayer ? (
+            classId === "enoki" ? <EnokiFigure /> : classId === "mini-enoki" ? <MiniEnokiFigure /> : <MacadamiaFigure />
           ) : (
-            <HeroMacadamiaAvatar accent={accent} />
-          )
-        ) : (
-          <EnemyAvatar traitId={traitId} color={accent} />
-        )}
+            <EnemyFigure traitId={traitId} />
+          )}
+        </div>
       </div>
-      <div className="battle-avatar__glyph">{glyph}</div>
-      <div className="battle-avatar__label">{label}</div>
+      {label && <div className="battle-avatar__label">{label}</div>}
     </div>
   );
 }

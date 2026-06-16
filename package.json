@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
+    "check": "node --experimental-specifier-resolution=node src/game/engine.selfcheck.js",
     "preview": "vite preview --host 127.0.0.1",
     "electron:dev": "node electron/dev-runner.cjs",
     "electron:build": "npm run build && electron-builder",

@@ -3,7 +3,7 @@ import {
   TRAITS,
   getEnemyBlueprint,
   getStarterDeck,
-} from "../data/content";
+} from "../data/content.js";
 
 let runtimeId = 1;
 
@@ -25,8 +25,8 @@ function shuffle(list) {
   return copy;
 }
 
-function buildDeckInstances(classId, buildId) {
-  return shuffle(getStarterDeck(classId, buildId)).map((card) => ({
+function buildDeckInstances(classId) {
+  return shuffle(getStarterDeck(classId)).map((card) => ({
     ...card,
     instanceId: nextId(card.key),
   }));
@@ -72,6 +72,18 @@ function enqueueShake(report, force = "soft") {
   report.events.push({ type: "shake", force });
 }
 
+function enqueueCardFlow(report, kind, cards) {
+  if (cards?.length) report.events.push({ type: "cardFlow", kind, cards });
+}
+
+function enqueueActorAction(report, actorId) {
+  report.events.push({ type: "actorAction", actorId, action: "attack" });
+}
+
+function intentDealsDamage(intent) {
+  return ["attack", "miniSweep", "stripAttack", "attackAndGuard", "attackAll"].includes(intent?.type);
+}
+
 function drawCardsRaw(deck, discard, count) {
   let nextDeck = [...deck];
   let nextDiscard = [...discard];
@@ -101,14 +113,17 @@ function drawCards(state, count, report, label = "摸牌") {
   state.player.discard = result.discard;
   state.player.hand.push(...result.drawn);
   if (result.drawn.length) {
+    enqueueCardFlow(report, "draw", result.drawn);
     enqueueFloater(report, "deck", `+${result.drawn.length} 抽`, "draw");
     pushLog(state, `${label}：抽了 ${result.drawn.length} 张牌。`);
   }
 }
 
 function discardHand(state) {
-  state.player.discard.push(...state.player.hand);
+  const discarded = [...state.player.hand];
+  state.player.discard.push(...discarded);
   state.player.hand = [];
+  return discarded;
 }
 
 function countReadyMinis(player) {
@@ -266,7 +281,6 @@ function hitPlayerDirect(state, amount, report, source = "受伤", attackerId = 
 function hitPlayerFromEnemy(state, amount, report, source, attackerId) {
   if (
     state.player.classId === "enoki" &&
-    state.player.buildId === "martyr" &&
     state.player.status.decoyReady > 0 &&
     state.player.minis.length
   ) {
@@ -287,7 +301,6 @@ function hitAllMinis(state, amount, report, source) {
   snapshot.forEach((mini) => {
     if (
       state.player.classId === "enoki" &&
-      state.player.buildId === "guardian" &&
       state.player.status.bodyguardHits > 0
     ) {
       state.player.status.bodyguardHits -= 1;
@@ -395,31 +408,23 @@ function absorbTrait(state, enemy, report) {
     return;
   }
 
-  if (state.player.buildId === "focus") {
-    if (state.player.currentTraitId === traitId) {
-      state.player.focusChain = Math.min(4, state.player.focusChain + 1);
-    } else if (state.player.lastAbsorbedTraitId === traitId) {
-      state.player.currentTraitId = traitId;
-      state.player.focusChain = Math.min(4, state.player.focusChain + 1);
-    } else {
-      state.player.currentTraitId = traitId;
-      state.player.focusChain = 1;
-    }
-    state.player.lastAbsorbedTraitId = traitId;
-    state.player.traits = [{ id: traitId, stacks: state.player.focusChain }];
+  if (state.player.lastAbsorbedTraitId === traitId || state.player.currentTraitId === traitId) {
+    state.player.focusChain = Math.min(4, (state.player.focusChain || 1) + 1);
   } else {
-    const known = state.player.traits.find((entry) => entry.id === traitId);
-    if (known) {
-      known.stacks += 1;
-    } else {
-      state.player.traits.push({ id: traitId, stacks: 1 });
-      if (state.player.traits.length > 4) {
-        state.player.traits.shift();
-      }
-    }
-    state.player.currentTraitId = traitId;
     state.player.focusChain = 1;
   }
+  state.player.lastAbsorbedTraitId = traitId;
+
+  const known = state.player.traits.find((entry) => entry.id === traitId);
+  if (known) {
+    known.stacks += 1;
+  } else {
+    state.player.traits.push({ id: traitId, stacks: 1 });
+    if (state.player.traits.length > 4) {
+      state.player.traits.shift();
+    }
+  }
+  state.player.currentTraitId = traitId;
 
   enqueueBanner(report, `吸收 ${trait.name}`, enemy.name, "trait");
   enqueueFloater(report, "player", trait.short, "trait");
@@ -629,7 +634,7 @@ function captureRemovedEnemies(beforeEnemies, afterEnemies) {
 
 export function openEncounter(baseState, layer, encounter, heal = 0) {
   const state = cloneState(baseState);
-  const deck = buildDeckInstances(state.classId, state.buildId);
+  const deck = buildDeckInstances(state.classId);
   const draw = drawCardsRaw(deck, [], 5);
 
   state.layerIndex = layer.layerIndex;
@@ -691,6 +696,8 @@ export function playCard(state, cardId, targetEnemyId = null) {
   }
   next.lastRemovedEnemy = null;
 
+  enqueueCardFlow(report, "play", [playedCard]);
+  if (playedCard.suite === "attack") enqueueActorAction(report, "player");
   enqueueBanner(report, playedCard.name, `${playedCard.cost} 能量`, playedCard.suite === "attack" ? "attack" : "skill");
   pushLog(next, `你打出了【${playedCard.name}】。`);
 
@@ -710,12 +717,9 @@ export function playCard(state, cardId, targetEnemyId = null) {
 export function endPlayerTurn(state) {
   const next = cloneState(state);
   const report = createReport();
-  discardHand(next);
+  enqueueCardFlow(report, "discard", discardHand(next));
   next.phase = "enemy";
-  next.player.status.decoyReady =
-    next.player.classId === "enoki" && next.player.buildId === "martyr" && next.player.minis.length
-      ? 1
-      : 0;
+  next.player.status.decoyReady = 0;
   enqueueBanner(report, "敌方回合", `第 ${next.turn} 轮`, "enemy");
   pushLog(next, "你收起手牌，肠壁开始反击。");
   return { nextState: next, report };
@@ -730,6 +734,7 @@ export function resolveEnemyAction(state, enemyId) {
   }
 
   const intent = enemy.intent;
+  if (intentDealsDamage(intent)) enqueueActorAction(report, enemy.instanceId);
   enqueueBanner(report, enemy.name, intent.label, "enemy");
 
   switch (intent.type) {
@@ -789,13 +794,6 @@ export function startNextPlayerTurn(state) {
 
   if (next.player.classId === "enoki" && next.player.minis.length) {
     growMinis(next, 1, report);
-    if (next.player.buildId === "guardian") {
-      const ready = countReadyMinis(next.player);
-      if (ready > 0) {
-        gainBlock(next.player, ready);
-        enqueueFloater(report, "player", `+${ready} 壳`, "block");
-      }
-    }
   }
 
   drawCards(next, 5, report, "新回合");
