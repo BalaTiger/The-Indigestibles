@@ -4,8 +4,10 @@ import { CardView } from "./CardView";
 export function HandFan({
   cards,
   selectedCardId,
+  aimingCardId,
   canPlayCard,
   onCardClick,
+  onCardPointerDown,
   onCardMouseEnter,
   onCardMouseLeave,
   traitPreview,
@@ -28,8 +30,10 @@ export function HandFan({
             key={card.instanceId}
             card={card}
             selected={selectedCardId === card.instanceId}
+            aimingSource={aimingCardId === card.instanceId}
             playable={canPlayCard(card)}
-            onClick={() => onCardClick(card)}
+            onClick={(event) => onCardClick(card, event)}
+            onPointerDown={(event) => onCardPointerDown?.(card, event)}
             onMouseEnter={() => onCardMouseEnter?.(card)}
             onMouseLeave={() => onCardMouseLeave?.(card)}
             traitPreview={traitPreview}

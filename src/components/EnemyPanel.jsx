@@ -31,6 +31,7 @@ export function EnemyPanel({ enemy, onTarget, targeted, floaters, action }) {
     <button
       type="button"
       className={`enemy-panel enemy-panel--horizontal ${targeted ? "is-targeted" : ""}`}
+      data-enemy-id={enemy.instanceId}
       onClick={onTarget}
       style={{ "--trait-color": trait?.color || "#cda16d" }}
     >

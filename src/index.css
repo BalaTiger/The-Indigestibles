@@ -701,6 +701,47 @@ select {
   cursor: default;
 }
 
+.game-card.is-aiming-source {
+  opacity: 0;
+}
+
+.game-card.is-floating {
+  position: fixed;
+  bottom: auto;
+  pointer-events: none;
+  z-index: 5001;
+  transform: translate(-50%, -50%) rotate(var(--card-rotate, -4deg)) scale(1.04);
+  transition: none;
+  box-shadow: 0 30px 48px rgba(0, 0, 0, 0.5);
+}
+
+.aim-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 5000;
+  pointer-events: none;
+}
+
+.aim-layer__svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+.aim-layer__path {
+  fill: none;
+  stroke: #f7ead9;
+  stroke-width: 2.5;
+  stroke-dasharray: 8 7;
+  filter: drop-shadow(0 0 8px rgba(247, 234, 217, 0.5));
+}
+
+.aim-layer marker path {
+  fill: #f7ead9;
+}
+
 .game-card__cost {
   position: absolute;
   top: 12px;

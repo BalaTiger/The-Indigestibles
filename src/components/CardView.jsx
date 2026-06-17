@@ -37,8 +37,11 @@ export function CardView({
   card,
   selected,
   playable,
+  floating,
+  aimingSource,
   layoutStyle,
   onClick,
+  onPointerDown,
   onMouseEnter,
   onMouseLeave,
   traitPreview,
@@ -49,10 +52,14 @@ export function CardView({
   return (
     <button
       type="button"
-      className={`game-card ${selected ? "is-selected" : ""} ${playable ? "is-playable" : "is-disabled"}`}
+      className={`game-card ${selected ? "is-selected" : ""} ${playable ? "is-playable" : "is-disabled"} ${
+        floating ? "is-floating" : ""
+      } ${aimingSource ? "is-aiming-source" : ""}`}
       onClick={onClick}
+      onPointerDown={onPointerDown}
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}
+      draggable={false}
       style={{
         ...layoutStyle,
         "--card-edge": palette.edge,

@@ -23,6 +23,7 @@ import {
   startNextPlayerTurn,
 } from "./game/engine";
 import { HandFan } from "./components/HandFan";
+import { CardView } from "./components/CardView";
 import { FxFloaters } from "./components/FxLayer";
 import { EnemyPanel } from "./components/EnemyPanel";
 import { BattleAvatar } from "./components/BattleAvatar";
@@ -68,6 +69,41 @@ function CardFlowLayer({ flows }) {
           <strong>{flow.card.name}</strong>
         </div>
       ))}
+    </div>
+  );
+}
+
+function AimLayer({ aim, traitPreview }) {
+  if (!aim) return null;
+  const midX = (aim.origin.x + aim.pos.x) / 2;
+  const midY = Math.min(aim.origin.y, aim.pos.y) - 90;
+  const path = `M ${aim.origin.x} ${aim.origin.y} Q ${midX} ${midY} ${aim.pos.x} ${aim.pos.y}`;
+
+  return (
+    <div className="aim-layer">
+      <svg className="aim-layer__svg">
+        <defs>
+          <marker id="aim-arrow" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto">
+            <path d="M 0 0 L 10 5 L 0 10 z" />
+          </marker>
+        </defs>
+        <path className="aim-layer__path" d={path} markerEnd="url(#aim-arrow)" />
+      </svg>
+      <CardView
+        card={aim.card}
+        selected={false}
+        playable
+        floating
+        traitPreview={traitPreview}
+        layoutStyle={{
+          left: `${aim.pos.x}px`,
+          top: `${aim.pos.y}px`,
+          "--card-x": "0px",
+          "--card-y": "0px",
+          "--card-rotate": "-4deg",
+          "--card-stack": 5001,
+        }}
+      />
     </div>
   );
 }
@@ -164,6 +200,8 @@ export default function App() {
   });
   const [state, setState] = useState(() => createRunState(config));
   const [selectedCardId, setSelectedCardId] = useState(null);
+  const [aim, setAim] = useState(null);
+  const [aimTargetId, setAimTargetId] = useState(null);
   const [floaters, setFloaters] = useState({});
   const [banner, setBanner] = useState(null);
   const [cardFlows, setCardFlows] = useState([]);
@@ -175,10 +213,16 @@ export default function App() {
   const [hoveredCardCost, setHoveredCardCost] = useState(null);
   const [showQuitConfirm, setShowQuitConfirm] = useState(false);
   const stateRef = useRef(state);
+  const aimRef = useRef(null);
+  const ignoreNextAimClickRef = useRef(false);
 
   useEffect(() => {
     stateRef.current = state;
   }, [state]);
+
+  useEffect(() => {
+    aimRef.current = aim;
+  }, [aim]);
 
   const theme = getCurrentTheme(state);
   const hero = HEROES[config.classId];
@@ -197,6 +241,39 @@ export default function App() {
     if (!firstEnemy) return null;
     return TRAITS[firstEnemy.traitId] || null;
   }, [config.classId, aliveEnemies]);
+
+  const getAimTargetAt = useCallback((x, y, card) => {
+    const panel = document.elementFromPoint(x, y)?.closest("[data-enemy-id]");
+    const enemyId = panel?.dataset.enemyId;
+    if (!enemyId) return null;
+    return getValidTargets(stateRef.current, card).includes(enemyId) ? enemyId : null;
+  }, []);
+
+  const updateAimPoint = useCallback(
+    (x, y) => {
+      const current = aimRef.current;
+      if (!current) return;
+      const targetId = getAimTargetAt(x, y, current.card);
+      setAim((entry) =>
+        entry
+          ? {
+              ...entry,
+              pos: { x, y },
+              moved: entry.moved || Math.hypot(x - entry.start.x, y - entry.start.y) > 6,
+            }
+          : null,
+      );
+      setAimTargetId(targetId);
+    },
+    [getAimTargetAt],
+  );
+
+  const clearAim = useCallback(() => {
+    ignoreNextAimClickRef.current = false;
+    setAim(null);
+    setAimTargetId(null);
+    setSelectedCardId(null);
+  }, []);
 
   const handleCardMouseEnter = useCallback((card) => {
     setHoveredCardCost(card.cost);
@@ -299,7 +376,7 @@ export default function App() {
   const enterNode = useCallback(
     (node) => {
       if (!node.unlocked || isResolving) return;
-      setSelectedCardId(null);
+      clearAim();
       setFloaters({});
       setBanner(null);
       setIsResolving(false);
@@ -319,16 +396,16 @@ export default function App() {
       else if (node.type === "event") setScreen("event");
       else if (node.type === "campfire") setScreen("campfire");
     },
-    [isResolving, state],
+    [clearAim, isResolving, state],
   );
 
   const returnToMap = useCallback(() => {
-    setSelectedCardId(null);
+    clearAim();
     setFloaters({});
     setBanner(null);
     setIsResolving(false);
     setScreen("map");
-  }, []);
+  }, [clearAim]);
 
   const completeNodeAndReturn = useCallback((baseState = null) => {
     const current = baseState || stateRef.current;
@@ -406,10 +483,10 @@ export default function App() {
         return;
       }
       setIsResolving(true);
+      clearAim();
       const { nextState, report } = playCard(stateRef.current, card.instanceId, targetEnemyId);
       setState(nextState);
       handleReport(report);
-      setSelectedCardId(null);
       setHoveredCardCost(null);
       await wait(450);
       setIsResolving(false);
@@ -420,22 +497,115 @@ export default function App() {
         window.setTimeout(() => setScreen("defeat-modal"), 500);
       }
     },
-    [completeNodeAndReturn, handleReport, isResolving],
+    [clearAim, completeNodeAndReturn, handleReport, isResolving],
+  );
+
+  const releaseAim = useCallback(
+    (x, y) => {
+      const current = aimRef.current;
+      if (!current) return;
+      const targetId = getAimTargetAt(x, y, current.card);
+      clearAim();
+      if (targetId) {
+        void performCardPlay(current.card, targetId);
+      }
+    },
+    [clearAim, getAimTargetAt, performCardPlay],
+  );
+
+  const beginAim = useCallback(
+    (card, event, mode) => {
+      if (card.target !== "enemy" || !canPlaySelectedCard(card)) return false;
+      const rect = event.currentTarget.getBoundingClientRect();
+      const point = { x: event.clientX, y: event.clientY };
+      setSelectedCardId(card.instanceId);
+      setHoveredCardCost(card.cost);
+      setAim({
+        card,
+        mode,
+        origin: { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 },
+        pos: point,
+        start: point,
+        moved: false,
+      });
+      setAimTargetId(getAimTargetAt(point.x, point.y, card));
+      return true;
+    },
+    [canPlaySelectedCard, getAimTargetAt],
+  );
+
+  const onCardPointerDown = useCallback(
+    (card, event) => {
+      if (event.button !== 0 || card.target !== "enemy" || !beginAim(card, event, "drag")) return;
+      event.preventDefault();
+      event.stopPropagation();
+    },
+    [beginAim],
   );
 
   const onCardClick = useCallback(
-    (card) => {
+    (card, event) => {
       if (!canPlaySelectedCard(card)) {
         return;
       }
       if (card.target === "enemy") {
-        setSelectedCardId((current) => (current === card.instanceId ? null : card.instanceId));
+        event?.preventDefault();
+        event?.stopPropagation();
         return;
       }
       void performCardPlay(card, null);
     },
     [canPlaySelectedCard, performCardPlay],
   );
+
+  useEffect(() => {
+    const onPointerMove = (event) => {
+      const current = aimRef.current;
+      if (!current) return;
+      updateAimPoint(event.clientX, event.clientY);
+    };
+
+    const onPointerUp = (event) => {
+      const current = aimRef.current;
+      if (!current || current.mode !== "drag") return;
+      const targetId = getAimTargetAt(event.clientX, event.clientY, current.card);
+      if (targetId) {
+        releaseAim(event.clientX, event.clientY);
+        return;
+      }
+      if (Math.hypot(event.clientX - current.start.x, event.clientY - current.start.y) <= 6) {
+        ignoreNextAimClickRef.current = true;
+        window.setTimeout(() => {
+          ignoreNextAimClickRef.current = false;
+        }, 0);
+        setAim((entry) => (entry ? { ...entry, mode: "attached", pos: { x: event.clientX, y: event.clientY } } : null));
+        setAimTargetId(null);
+        return;
+      }
+      clearAim();
+    };
+
+    const onClick = (event) => {
+      const current = aimRef.current;
+      if (!current || current.mode !== "attached") return;
+      event.preventDefault();
+      event.stopPropagation();
+      if (ignoreNextAimClickRef.current) {
+        ignoreNextAimClickRef.current = false;
+        return;
+      }
+      releaseAim(event.clientX, event.clientY);
+    };
+
+    window.addEventListener("pointermove", onPointerMove);
+    window.addEventListener("pointerup", onPointerUp);
+    window.addEventListener("click", onClick, true);
+    return () => {
+      window.removeEventListener("pointermove", onPointerMove);
+      window.removeEventListener("pointerup", onPointerUp);
+      window.removeEventListener("click", onClick, true);
+    };
+  }, [clearAim, getAimTargetAt, releaseAim, updateAimPoint]);
 
   const onEnemyTarget = useCallback(
     (enemyId) => {
@@ -455,7 +625,7 @@ export default function App() {
     const endResult = endPlayerTurn(stateRef.current);
     setState(endResult.nextState);
     handleReport(endResult.report);
-    setSelectedCardId(null);
+    clearAim();
     setHoveredCardCost(null);
     await wait(500);
 
@@ -482,7 +652,7 @@ export default function App() {
     handleReport(startResult.report);
     await wait(450);
     setIsResolving(false);
-  }, [completeNodeAndReturn, handleReport, isResolving, state.phase]);
+  }, [clearAim, completeNodeAndReturn, handleReport, isResolving, state.phase]);
 
   const renderTitle = () => (
     <TitleScreen onNewGame={() => setScreen("hero-select")} onQuit={handleQuit} />
@@ -546,7 +716,7 @@ export default function App() {
               <div className="battle-surface__copy">
                 {needsTarget && (
                   <div className="target-callout">
-                    <span>点击敌人来打出</span>
+                    <span>{aim?.mode === "attached" ? "点击目标释放" : "拖到敌人身上释放"}</span>
                     <strong>{selectedCard?.name}</strong>
                   </div>
                 )}
@@ -594,7 +764,7 @@ export default function App() {
                       key={enemy.instanceId}
                       enemy={enemy}
                       onTarget={() => onEnemyTarget(enemy.instanceId)}
-                      targeted={validTargets.includes(enemy.instanceId) && needsTarget}
+                      targeted={aimTargetId === enemy.instanceId}
                       floaters={floaters}
                       action={avatarActions[enemy.instanceId]}
                     />
@@ -648,8 +818,10 @@ export default function App() {
                 <HandFan
                   cards={state.player.hand}
                   selectedCardId={selectedCardId}
+                  aimingCardId={aim?.card.instanceId}
                   canPlayCard={canPlaySelectedCard}
                   onCardClick={onCardClick}
+                  onCardPointerDown={onCardPointerDown}
                   onCardMouseEnter={handleCardMouseEnter}
                   onCardMouseLeave={handleCardMouseLeave}
                   traitPreview={traitPreview}
@@ -678,6 +850,7 @@ export default function App() {
           </div>
         )}
         <CardFlowLayer flows={cardFlows} />
+        <AimLayer aim={aim} traitPreview={traitPreview} />
         {discardOpen && <DiscardModal cards={state.player.discard} onClose={() => setDiscardOpen(false)} />}
       </div>
     );
