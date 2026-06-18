@@ -24,7 +24,7 @@ import {
 } from "./game/engine";
 import { HandFan } from "./components/HandFan";
 import { CardView } from "./components/CardView";
-import { FxFloaters } from "./components/FxLayer";
+import { FxFloaters, HitFxLayer } from "./components/FxLayer";
 import { EnemyPanel } from "./components/EnemyPanel";
 import { BattleAvatar } from "./components/BattleAvatar";
 import { StatChip } from "./components/StatChip";
@@ -148,13 +148,14 @@ function QuitRunButton({ onClick, disabled }) {
   );
 }
 
-function MiniColony({ minis, floaters }) {
+function MiniColony({ minis, floaters, hitFx }) {
   return (
     <div className="mini-colony">
       {minis.map((mini) => (
-        <div key={mini.id} className={`mini-unit ${mini.ready ? "is-ready" : ""}`}>
-          <FxFloaters floaters={floaters[makeTargetKey("mini", mini.id)]} />
-          <BattleAvatar isPlayer classId="mini-enoki" color="#d4d785" glyph="" label="" />
+          <div key={mini.id} className={`mini-unit ${mini.ready ? "is-ready" : ""}`}>
+            <FxFloaters floaters={floaters[makeTargetKey("mini", mini.id)]} />
+            <HitFxLayer effects={hitFx[makeTargetKey("mini", mini.id)]} />
+            <BattleAvatar isPlayer classId="mini-enoki" color="#d4d785" glyph="" label="" />
           <div className="mini-unit__meta">HP {mini.hp}</div>
         </div>
       ))}
@@ -203,18 +204,21 @@ export default function App() {
   const [aim, setAim] = useState(null);
   const [aimTargetId, setAimTargetId] = useState(null);
   const [floaters, setFloaters] = useState({});
+  const [hitFx, setHitFx] = useState({});
   const [banner, setBanner] = useState(null);
   const [cardFlows, setCardFlows] = useState([]);
   const [avatarActions, setAvatarActions] = useState({});
   const [discardOpen, setDiscardOpen] = useState(false);
   const [isResolving, setIsResolving] = useState(false);
-  const [shakeToken, setShakeToken] = useState(0);
+  const [screenShake, setScreenShake] = useState(null);
   const [showMapOverlay, setShowMapOverlay] = useState(false);
   const [hoveredCardCost, setHoveredCardCost] = useState(null);
   const [showQuitConfirm, setShowQuitConfirm] = useState(false);
   const stateRef = useRef(state);
   const aimRef = useRef(null);
   const ignoreNextAimClickRef = useRef(false);
+  const shakeTimerRef = useRef(null);
+  const shakeForceRef = useRef(null);
 
   useEffect(() => {
     stateRef.current = state;
@@ -322,6 +326,35 @@ export default function App() {
     }, 900);
   }, []);
 
+  const appendHitFx = useCallback((target, effects) => {
+    const id = `${target}-${Date.now()}-${Math.random()}`;
+    setHitFx((current) => {
+      const delay = Math.min((current[target]?.length || 0) * 140, 420);
+      const entry = { id, effects, delay };
+      return { ...current, [target]: [...(current[target] || []), entry] };
+    });
+    window.setTimeout(() => {
+      setHitFx((current) => ({
+        ...current,
+        [target]: (current[target] || []).filter((entry) => entry.id !== id),
+      }));
+    }, 1300);
+  }, []);
+
+  const triggerScreenShake = useCallback((force = "soft") => {
+    if (force !== "heavy" && shakeForceRef.current === "heavy") return;
+    window.clearTimeout(shakeTimerRef.current);
+    shakeForceRef.current = force;
+    setScreenShake(null);
+    window.requestAnimationFrame(() => {
+      setScreenShake({ id: `${Date.now()}-${Math.random()}`, force });
+      shakeTimerRef.current = window.setTimeout(() => {
+        shakeForceRef.current = null;
+        setScreenShake(null);
+      }, force === "heavy" ? 320 : 240);
+    });
+  }, []);
+
   const handleReport = useCallback(
     (report) => {
       report.events.forEach((event) => {
@@ -332,7 +365,7 @@ export default function App() {
           setBanner({ ...event, id: `${Date.now()}-${Math.random()}` });
         }
         if (event.type === "shake") {
-          setShakeToken((token) => token + 1);
+          triggerScreenShake(event.force);
         }
         if (event.type === "cardFlow") {
           showCardFlow(event.kind, event.cards);
@@ -340,9 +373,20 @@ export default function App() {
         if (event.type === "actorAction") {
           triggerAvatarAction(event.actorId);
         }
+        if (event.type === "hitFx") {
+          appendHitFx(event.target, event.effects);
+          triggerScreenShake(event.effects.includes("hit") || event.effects.includes("break") ? "heavy" : "soft");
+        }
       });
     },
-    [appendFloaters, showCardFlow, triggerAvatarAction],
+    [appendFloaters, appendHitFx, showCardFlow, triggerAvatarAction, triggerScreenShake],
+  );
+
+  useEffect(
+    () => () => {
+      window.clearTimeout(shakeTimerRef.current);
+    },
+    [],
   );
 
   useEffect(() => {
@@ -378,6 +422,7 @@ export default function App() {
       if (!node.unlocked || isResolving) return;
       clearAim();
       setFloaters({});
+      setHitFx({});
       setBanner(null);
       setIsResolving(false);
 
@@ -402,6 +447,7 @@ export default function App() {
   const returnToMap = useCallback(() => {
     clearAim();
     setFloaters({});
+    setHitFx({});
     setBanner(null);
     setIsResolving(false);
     setScreen("map");
@@ -686,7 +732,7 @@ export default function App() {
   const renderCombat = () => {
     return (
       <div
-        className={`app-shell ${shakeToken % 2 === 1 ? "is-shaking" : ""}`}
+        className={`app-shell ${screenShake ? `is-shaking is-shaking--${screenShake.force || "soft"}` : ""}`}
         style={{
           "--theme-accent": theme.accent,
           "--theme-surface": theme.surface,
@@ -735,6 +781,7 @@ export default function App() {
                       action={avatarActions.player}
                       plain
                     />
+                    <HitFxLayer effects={hitFx.player} />
                     <div className="player-combat-card__info">
                       <StatChip icon={Heart} label="HP" value={`${state.player.hp}/${state.player.maxHp}`} />
                       <StatChip icon={Shield} label="格挡" value={state.player.block} />
@@ -742,7 +789,7 @@ export default function App() {
                   </div>
 
                   {state.player.classId === "enoki" ? (
-                    <MiniColony minis={state.player.minis} floaters={floaters} />
+                    <MiniColony minis={state.player.minis} floaters={floaters} hitFx={hitFx} />
                   ) : (
                     <TraitRack player={state.player} />
                   )}
@@ -766,6 +813,7 @@ export default function App() {
                       onTarget={() => onEnemyTarget(enemy.instanceId)}
                       targeted={aimTargetId === enemy.instanceId}
                       floaters={floaters}
+                      hitFx={hitFx}
                       action={avatarActions[enemy.instanceId]}
                     />
                   ))}

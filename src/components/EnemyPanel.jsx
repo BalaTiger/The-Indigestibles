@@ -1,7 +1,7 @@
 import React from "react";
 import { Heart, Shield, Sword } from "lucide-react";
 import { BattleAvatar } from "./BattleAvatar";
-import { FxFloaters } from "./FxLayer";
+import { FxFloaters, HitFxLayer } from "./FxLayer";
 import { StatChip } from "./StatChip";
 import { FanSwordsIcon } from "./FanSwordsIcon";
 import { TRAITS } from "../data/content";
@@ -24,13 +24,13 @@ function makeTargetKey(kind, id) {
   return `${kind}:${id}`;
 }
 
-export function EnemyPanel({ enemy, onTarget, targeted, floaters, action }) {
+export function EnemyPanel({ enemy, onTarget, targeted, floaters, hitFx, action }) {
   const trait = TRAITS[enemy.traitId];
 
   return (
     <button
       type="button"
-      className={`enemy-panel enemy-panel--horizontal ${targeted ? "is-targeted" : ""}`}
+      className="enemy-panel enemy-panel--horizontal"
       data-enemy-id={enemy.instanceId}
       onClick={onTarget}
       style={{ "--trait-color": trait?.color || "#cda16d" }}
@@ -51,6 +51,7 @@ export function EnemyPanel({ enemy, onTarget, targeted, floaters, action }) {
           action={action}
           plain
         />
+        <HitFxLayer effects={hitFx[makeTargetKey("enemy", enemy.instanceId)]} />
       </div>
 
       <div className="enemy-panel__body">

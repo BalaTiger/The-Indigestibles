@@ -80,6 +80,13 @@ function enqueueActorAction(report, actorId) {
   report.events.push({ type: "actorAction", actorId, action: "attack" });
 }
 
+function enqueueHitFx(report, target, result) {
+  const effects = [];
+  if (result.blocked > 0) effects.push(result.remainingBlock > 0 ? "armor" : "break");
+  if (result.actual > 0) effects.push("hit");
+  if (effects.length) report.events.push({ type: "hitFx", target, effects });
+}
+
 function intentDealsDamage(intent) {
   return ["attack", "miniSweep", "stripAttack", "attackAndGuard", "attackAll"].includes(intent?.type);
 }
@@ -198,7 +205,7 @@ function applyDamage(target, amount) {
   target.block -= blocked;
   const actual = Math.max(0, amount - blocked);
   target.hp -= actual;
-  return { actual, blocked };
+  return { actual, blocked, remainingBlock: target.block };
 }
 
 function removeDeadMinis(state) {
@@ -218,6 +225,7 @@ function damageMini(state, miniId, amount, report, source = "受伤") {
   }
   const actual = Math.min(mini.hp, amount);
   mini.hp -= actual;
+  enqueueHitFx(report, `mini:${mini.id}`, { actual, blocked: 0, remainingBlock: 0 });
   enqueueFloater(report, `mini:${mini.id}`, `-${actual}`, "damage");
   if (mini.hp <= 0) {
     onMiniDeath(state, mini, report, "被煮烂");
@@ -242,6 +250,7 @@ function dealDamageToEnemy(state, enemyId, amount, report, source = "攻击") {
   }
   const finalAmount = amount + consumeExposed(enemy);
   const result = applyDamage(enemy, finalAmount);
+  enqueueHitFx(report, `enemy:${enemy.instanceId}`, result);
   enqueueFloater(report, `enemy:${enemy.instanceId}`, `-${result.actual}`, "damage");
   if (result.blocked > 0) {
     enqueueFloater(report, `enemy:${enemy.instanceId}`, `挡 ${result.blocked}`, "block");
@@ -259,6 +268,7 @@ function dealDamageToEnemy(state, enemyId, amount, report, source = "攻击") {
 
 function hitPlayerDirect(state, amount, report, source = "受伤", attackerId = null) {
   const result = applyDamage(state.player, amount);
+  enqueueHitFx(report, "player", result);
   enqueueFloater(report, "player", `-${result.actual}`, "damage");
   if (result.blocked > 0) {
     enqueueFloater(report, "player", `挡 ${result.blocked}`, "block");
