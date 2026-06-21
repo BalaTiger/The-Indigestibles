@@ -39,6 +39,7 @@ export function CardView({
   playable,
   floating,
   aimingSource,
+  displayOnly,
   layoutStyle,
   onClick,
   onPointerDown,
@@ -48,13 +49,17 @@ export function CardView({
 }) {
   const palette = paletteMap[card.palette] || paletteMap.enoki;
   const showTrait = traitPreview && card.key === "crack-and-seal";
+  const Tag = displayOnly ? "div" : "button";
 
   return (
-    <button
-      type="button"
+    <Tag
+      type={displayOnly ? undefined : "button"}
       className={`game-card ${selected ? "is-selected" : ""} ${playable ? "is-playable" : "is-disabled"} ${
         floating ? "is-floating" : ""
-      } ${aimingSource ? "is-aiming-source" : ""}`}
+      } ${aimingSource ? "is-aiming-source" : ""} ${displayOnly ? "game-card--display" : ""}`}
+      role={displayOnly ? "img" : "button"}
+      tabIndex={displayOnly ? undefined : 0}
+      aria-label={card.name}
       onClick={onClick}
       onPointerDown={onPointerDown}
       onMouseEnter={onMouseEnter}
@@ -67,7 +72,7 @@ export function CardView({
         "--card-badge": palette.badge,
       }}
     >
-      <span className="game-card__cost">{card.cost}</span>
+      <span className="game-card__cost energy-gem">{card.cost}</span>
       <span className="game-card__suite">{card.suite === "attack" ? "攻击" : "技能"}</span>
       <div className="game-card__name">{card.name}</div>
       <div className="game-card__text">{card.description}</div>
@@ -84,6 +89,6 @@ export function CardView({
         <span>{card.target === "enemy" ? "选敌" : "即时"}</span>
         <span>{card.instanceId.split("-").slice(-1)[0]}</span>
       </div>
-    </button>
+    </Tag>
   );
 }

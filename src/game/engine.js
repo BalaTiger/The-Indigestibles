@@ -1,6 +1,7 @@
 import {
   HEROES,
   TRAITS,
+  getCardDefinition,
   getEnemyBlueprint,
   getStarterDeck,
 } from "../data/content.js";
@@ -25,8 +26,11 @@ function shuffle(list) {
   return copy;
 }
 
-function buildDeckInstances(classId) {
-  return shuffle(getStarterDeck(classId)).map((card) => ({
+function buildDeckInstances(state) {
+  const cards = state.player?.deckKeys?.length
+    ? state.player.deckKeys.map((key) => getCardDefinition(key)).filter(Boolean)
+    : getStarterDeck(state.classId);
+  return shuffle(cards).map((card) => ({
     ...card,
     instanceId: nextId(card.key),
   }));
@@ -43,6 +47,7 @@ function materializeEnemy(id) {
     intent: blueprint.intentCycle[0],
     status: {
       exposed: 0,
+      poison: 0,
     },
   };
 }
@@ -137,22 +142,43 @@ function countReadyMinis(player) {
   return player.minis.filter((mini) => mini.ready).length;
 }
 
-function createMini() {
+function createMini(kind = "basic", attack = 1, maturityThreshold = 1) {
   return {
     id: nextId("mini"),
     hp: 3,
     maxHp: 3,
     growth: 0,
     ready: false,
+    kind,
+    attack,
+    maturityThreshold,
+    deathrattleIcon: ["bomb", "poison", "draw"].includes(kind) ? kind : null,
+    hasDevoured: false,
   };
 }
 
-function summonMinis(state, amount, report) {
+function createSpecialMini(kind) {
+  const specs = {
+    basic: { hp: 3, maxHp: 3, attack: 1, maturityThreshold: 1 },
+    vampire: { hp: 3, maxHp: 3, attack: 2, maturityThreshold: 2 },
+    energy: { hp: 2, maxHp: 2, attack: 0, maturityThreshold: 3 },
+    buffer: { hp: 3, maxHp: 3, attack: 1, maturityThreshold: 2 },
+    "re-attack": { hp: 3, maxHp: 3, attack: 1, maturityThreshold: 3 },
+    devourer: { hp: 4, maxHp: 4, attack: 1, maturityThreshold: 3 },
+    bomb: { hp: 2, maxHp: 2, attack: 1, maturityThreshold: 2 },
+    poison: { hp: 2, maxHp: 2, attack: 1, maturityThreshold: 2 },
+    draw: { hp: 2, maxHp: 2, attack: 1, maturityThreshold: 2 },
+  };
+  const spec = specs[kind] || specs.basic;
+  return { ...createMini(kind, spec.attack, spec.maturityThreshold), ...spec };
+}
+
+function summonMinis(state, amount, report, kind = "basic") {
   for (let i = 0; i < amount; i += 1) {
     if (state.player.minis.length >= 5) {
       break;
     }
-    const mini = createMini();
+    const mini = kind === "basic" ? createMini() : createSpecialMini(kind);
     state.player.minis.push(mini);
     enqueueFloater(report, `mini:${mini.id}`, "出芽", "summon");
   }
@@ -161,19 +187,59 @@ function summonMinis(state, amount, report) {
   }
 }
 
+function summonSpecialMini(state, kind, report) {
+  if (state.player.minis.length >= 5) {
+    pushLog(state, "小金针菇群落已满，新的分身无法出芽。");
+    return;
+  }
+  const mini = createSpecialMini(kind);
+  state.player.minis.push(mini);
+  enqueueFloater(report, `mini:${mini.id}`, "出芽", "summon");
+  pushLog(state, `特殊小金针菇 ${mini.kind} 冒出来了。`);
+}
+
 function growMinis(state, amount, report) {
   if (!state.player.minis.length) {
     return;
   }
   state.player.minis = state.player.minis.map((mini) => {
-    const growth = Math.min(3, mini.growth + amount);
+    const growth = Math.min(mini.maturityThreshold, mini.growth + amount);
     return {
       ...mini,
       growth,
-      ready: growth >= 2,
+      ready: growth >= mini.maturityThreshold,
     };
   });
   enqueueFloater(report, "player", `菌群 +${amount}`, "growth");
+  checkDevourerMaturity(state, report);
+}
+
+function checkDevourerMaturity(state, report) {
+  const devourers = state.player.minis.filter(
+    (m) => m.kind === "devourer" && m.ready && !m.hasDevoured,
+  );
+  devourers.forEach((devourer) => {
+    devourer.hasDevoured = true;
+    const others = state.player.minis.filter((m) => m.id !== devourer.id);
+    if (!others.length) return;
+
+    const totalAttack = others.reduce((sum, m) => sum + m.attack, 0);
+    const totalHp = others.reduce((sum, m) => sum + m.hp, 0);
+
+    others.forEach((m) => {
+      onMiniDeath(state, m, report, "被吞噬", null, false);
+    });
+    state.player.minis = state.player.minis.filter((m) => m.id === devourer.id);
+
+    devourer.attack += totalAttack * 2;
+    devourer.maxHp += totalHp * 2;
+    devourer.hp += totalHp * 2;
+    enqueueFloater(report, `mini:${devourer.id}`, "吞噬进化", "trait");
+    pushLog(
+      state,
+      `吞噬者吞噬了所有分身，攻击 ${devourer.attack}，HP ${devourer.hp}/${devourer.maxHp}。`,
+    );
+  });
 }
 
 function gainBlock(entity, amount) {
@@ -212,13 +278,34 @@ function removeDeadMinis(state) {
   state.player.minis = state.player.minis.filter((mini) => mini.hp > 0);
 }
 
-function onMiniDeath(state, mini, report, reason = "碎掉了") {
+function applyMiniDeathrattle(state, mini, report, killerEnemyId = null) {
+  if (mini.kind === "bomb") {
+    getAliveEnemies(state).forEach((enemy) => {
+      dealDamageToEnemy(state, enemy.instanceId, mini.attack * 2, report, "爆菇亡语");
+    });
+  }
+  if (mini.kind === "poison" && killerEnemyId) {
+    const killer = findEnemy(state, killerEnemyId);
+    if (killer) {
+      killer.status.poison = (killer.status.poison || 0) + mini.attack * 2;
+      enqueueFloater(report, `enemy:${killer.instanceId}`, `毒${mini.attack * 2}`, "trait");
+    }
+  }
+  if (mini.kind === "draw") {
+    drawCards(state, 1, report, "抽丝亡语");
+  }
+}
+
+function onMiniDeath(state, mini, report, reason = "碎掉了", killerEnemyId = null, triggerDeathrattle = true) {
   state.player.deadMinis += 1;
   enqueueFloater(report, `mini:${mini.id}`, reason, "death");
+  if (triggerDeathrattle) {
+    applyMiniDeathrattle(state, mini, report, killerEnemyId);
+  }
   pushLog(state, `小金针菇 ${reason}。`);
 }
 
-function damageMini(state, miniId, amount, report, source = "受伤") {
+function damageMini(state, miniId, amount, report, source = "受伤", killerEnemyId = null) {
   const mini = state.player.minis.find((unit) => unit.id === miniId);
   if (!mini) {
     return 0;
@@ -228,7 +315,7 @@ function damageMini(state, miniId, amount, report, source = "受伤") {
   enqueueHitFx(report, `mini:${mini.id}`, { actual, blocked: 0, remainingBlock: 0 });
   enqueueFloater(report, `mini:${mini.id}`, `-${actual}`, "damage");
   if (mini.hp <= 0) {
-    onMiniDeath(state, mini, report, "被煮烂");
+    onMiniDeath(state, mini, report, "被煮烂", killerEnemyId);
     removeDeadMinis(state);
   }
   pushLog(state, `${source}：小金针菇承受了 ${actual} 点伤害。`);
@@ -297,13 +384,13 @@ function hitPlayerFromEnemy(state, amount, report, source, attackerId) {
     state.player.status.decoyReady -= 1;
     const oldestMini = state.player.minis[0];
     pushLog(state, `菌葬仪式启动，${oldestMini.id} 抢在你前面挨了这一下。`);
-    damageMini(state, oldestMini.id, amount, report, source);
+    damageMini(state, oldestMini.id, amount, report, source, attackerId);
     return;
   }
   hitPlayerDirect(state, amount, report, source, attackerId);
 }
 
-function hitAllMinis(state, amount, report, source) {
+function hitAllMinis(state, amount, report, source, attackerId = null) {
   if (!state.player.minis.length) {
     return false;
   }
@@ -317,7 +404,7 @@ function hitAllMinis(state, amount, report, source) {
       pushLog(state, `你替 ${mini.id} 把伤害硬接了下来。`);
       hitPlayerDirect(state, amount, report, "替分身挡伤");
     } else {
-      damageMini(state, mini.id, amount, report, source);
+      damageMini(state, mini.id, amount, report, source, attackerId);
     }
   });
   return true;
@@ -441,6 +528,30 @@ function absorbTrait(state, enemy, report) {
   pushLog(state, `你把 ${enemy.name} 的“${trait.name}”封进了果壳。`);
 }
 
+function triggerMiniAttack(state, mini, targetEnemyId, report, source = "成熟分身支援") {
+  if (!mini?.ready || mini.attack <= 0 || !targetEnemyId) return;
+  enqueueActorAction(report, `mini:${mini.id}`);
+  dealDamageToEnemy(state, targetEnemyId, mini.attack, report, source);
+  enqueueFloater(report, `mini:${mini.id}`, "援击", "trait");
+
+  if (mini.kind === "vampire") {
+    healEntity(state.player, mini.attack);
+    enqueueFloater(report, "player", `+${mini.attack}`, "heal");
+  }
+
+  if (mini.kind === "buffer") {
+    const index = state.player.minis.findIndex((unit) => unit.id === mini.id);
+    [index - 1, index + 1].forEach((neighborIndex) => {
+      const neighbor = state.player.minis[neighborIndex];
+      if (!neighbor) return;
+      neighbor.attack += 1;
+      neighbor.maxHp += 1;
+      neighbor.hp += 1;
+      enqueueFloater(report, `mini:${neighbor.id}`, "+1/+1", "growth");
+    });
+  }
+}
+
 function useEnokiAssist(state, card, targetEnemyId, report) {
   if (state.player.classId !== "enoki" || card.suite !== "attack") {
     return;
@@ -453,9 +564,11 @@ function useEnokiAssist(state, card, targetEnemyId, report) {
   if (!actualTarget) {
     return;
   }
-  readyMinis.forEach((mini) => {
-    dealDamageToEnemy(state, actualTarget, 2, report, "成熟分身支援");
-    enqueueFloater(report, `mini:${mini.id}`, "援击", "trait");
+  readyMinis.forEach((mini, index) => {
+    triggerMiniAttack(state, mini, actualTarget, report);
+    if (mini.kind === "re-attack" && index > 0) {
+      triggerMiniAttack(state, readyMinis[index - 1], actualTarget, report, "连击菌丝");
+    }
   });
 }
 
@@ -535,6 +648,34 @@ function playCardEffect(state, card, targetEnemyId, report) {
       }
       break;
     }
+    case "summon-vampire":
+      hitPlayerDirect(state, 1, report, "血菇寄生");
+      summonSpecialMini(state, "vampire", report);
+      break;
+    case "summon-energy":
+      summonSpecialMini(state, "energy", report);
+      break;
+    case "summon-buffer":
+      summonSpecialMini(state, "buffer", report);
+      break;
+    case "summon-re-attack":
+      summonSpecialMini(state, "re-attack", report);
+      break;
+    case "summon-devourer":
+      summonSpecialMini(state, "devourer", report);
+      break;
+    case "summon-bomb":
+      summonSpecialMini(state, "bomb", report);
+      break;
+    case "summon-poison":
+      summonSpecialMini(state, "poison", report);
+      break;
+    case "summon-draw":
+      summonSpecialMini(state, "draw", report);
+      break;
+    case "accelerate-growth":
+      growMinis(state, 1, report);
+      break;
     case "shell-bash":
       if (targetEnemyId) {
         dealDamageToEnemy(state, targetEnemyId, 6, report, card.name);
@@ -644,7 +785,7 @@ function captureRemovedEnemies(beforeEnemies, afterEnemies) {
 
 export function openEncounter(baseState, layer, encounter, heal = 0) {
   const state = cloneState(baseState);
-  const deck = buildDeckInstances(state.classId);
+  const deck = buildDeckInstances(state);
   const draw = drawCardsRaw(deck, [], 5);
 
   state.layerIndex = layer.layerIndex;
@@ -730,6 +871,9 @@ export function endPlayerTurn(state) {
   enqueueCardFlow(report, "discard", discardHand(next));
   next.phase = "enemy";
   next.player.status.decoyReady = 0;
+  next.enemies.forEach((enemy) => {
+    enemy.block = 0;
+  });
   enqueueBanner(report, "敌方回合", `第 ${next.turn} 轮`, "enemy");
   pushLog(next, "你收起手牌，肠壁开始反击。");
   return { nextState: next, report };
@@ -761,7 +905,7 @@ export function resolveEnemyAction(state, enemyId) {
       pushLog(next, `${enemy.name} 缩进组织褶皱里，攒了 ${intent.value} 点格挡。`);
       break;
     case "miniSweep":
-      if (!hitAllMinis(next, intent.value, report, `${enemy.name}·${intent.label}`)) {
+      if (!hitAllMinis(next, intent.value, report, `${enemy.name}·${intent.label}`, enemy.instanceId)) {
         hitPlayerFromEnemy(next, intent.fallback, report, `${enemy.name}·${intent.label}`, enemy.instanceId);
       }
       break;
@@ -778,7 +922,7 @@ export function resolveEnemyAction(state, enemyId) {
     case "attackAll":
       hitPlayerFromEnemy(next, intent.value, report, `${enemy.name}·${intent.label}`, enemy.instanceId);
       if (next.player.minis.length && intent.miniValue) {
-        hitAllMinis(next, intent.miniValue, report, `${enemy.name}·${intent.label}`);
+        hitAllMinis(next, intent.miniValue, report, `${enemy.name}·${intent.label}`, enemy.instanceId);
       }
       break;
     default:
@@ -797,13 +941,39 @@ export function startNextPlayerTurn(state) {
 
   next.phase = "player";
   next.turn += 1;
-  next.player.block = 0;
+
+  const keepPlayerBlock = next.player.relics.includes("barrier-keep-relic");
+  if (!keepPlayerBlock) {
+    next.player.block = 0;
+  } else if (next.player.block > 0) {
+    enqueueFloater(report, "player", `保留 ${next.player.block} 格挡`, "block");
+  }
+
   next.player.energy = next.player.maxEnergy;
   next.player.status.bodyguardHits = 0;
   next.player.status.retaliate = 0;
 
+  next.enemies.forEach((enemy) => {
+    const poison = enemy.status?.poison || 0;
+    if (poison > 0 && enemy.hp > 0) {
+      dealDamageToEnemy(next, enemy.instanceId, poison, report, "中毒");
+      enemy.status.poison = Math.max(0, poison - 1);
+      enqueueFloater(report, `enemy:${enemy.instanceId}`, `毒-${poison}`, "trait");
+    }
+  });
+  checkCombatState(next, report);
+  if (next.phase !== "player") {
+    return { nextState: next, report };
+  }
+
   if (next.player.classId === "enoki" && next.player.minis.length) {
     growMinis(next, 1, report);
+    next.player.minis
+      .filter((mini) => mini.ready && mini.kind === "energy")
+      .forEach((mini) => {
+        next.player.energy += 1;
+        enqueueFloater(report, `mini:${mini.id}`, "+1 能", "energy");
+      });
   }
 
   drawCards(next, 5, report, "新回合");

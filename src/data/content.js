@@ -10,12 +10,12 @@ export const MAP_CONFIG = {
   middleNodeTypes: ["elite", "shop", "event", "campfire"],
   layerBossIds: ["pyloric-sentry", "brush-border-warden"],
   normalPools: {
-    0: ["acidic-dumpling", "sour-yogurt"],
+    0: ["gastric-pebble", "acidic-dumpling", "sour-yogurt"],
     1: ["bile-scout", "villus-bandit"],
     2: ["fermenting-rice", "mucus-polyp"],
   },
   elitePools: {
-    0: ["acidic-dumpling", "sour-yogurt"],
+    0: ["gastric-pebble", "acidic-dumpling", "sour-yogurt"],
     1: ["bile-scout", "villus-bandit"],
     2: ["fermenting-rice", "mucus-polyp"],
   },
@@ -149,6 +149,63 @@ export const TRAITS = {
   },
 };
 
+export const RELICS = {
+  "reward-relic": {
+    id: "reward-relic",
+    name: "选择之眼",
+    description: "战斗胜利后的卡牌奖励从 2 选 1 变为 3 选 1。",
+    rarity: "common",
+  },
+  "gold-relic": {
+    id: "gold-relic",
+    name: "糖原菌囊",
+    description: "战斗胜利时获得的糖原 +30%。",
+    rarity: "common",
+  },
+  "map-link-relic": {
+    id: "map-link-relic",
+    name: "肠壁捷径",
+    description: "获得时，可以在当前层地图上绘制一条单向捷径。",
+    rarity: "rare",
+  },
+  "barrier-keep-relic": {
+    id: "barrier-keep-relic",
+    name: "钙化菌膜",
+    description: "每回合开始时，你的格挡不会被清空。",
+    rarity: "epic",
+  },
+};
+
+export const GLYCOGEN_REWARDS = {
+  combat: 5,
+  elite: 8,
+  boss: 25,
+};
+
+export const CARD_RARITY_PRICE = {
+  common: 4,
+  rare: 7,
+  epic: 10,
+};
+
+export const RELIC_RARITY_PRICE = {
+  common: 10,
+  rare: 16,
+  epic: 24,
+};
+
+export const REWARD_CARD_POOL = [
+  "summon-vampire",
+  "summon-energy",
+  "summon-buffer",
+  "summon-re-attack",
+  "summon-devourer",
+  "summon-bomb",
+  "summon-poison",
+  "summon-draw",
+  "accelerate-growth",
+];
+
 const CARD_LIBRARY = {
   "cap-jab": {
     key: "cap-jab",
@@ -158,15 +215,17 @@ const CARD_LIBRARY = {
     cost: 1,
     palette: "enoki",
     description: "造成 6 点伤害。成熟的小金针菇会自动补刀。",
+    rarity: "common",
   },
   "split-cluster": {
     key: "split-cluster",
     name: "分叉出芽",
     suite: "skill",
     target: "none",
-    cost: 1,
+    cost: 2,
     palette: "enoki",
     description: "召唤 1 个小金针菇，并抽 1 张牌。",
+    rarity: "common",
   },
   "tender-guard": {
     key: "tender-guard",
@@ -176,6 +235,7 @@ const CARD_LIBRARY = {
     cost: 1,
     palette: "enoki",
     description: "获得 7 点格挡。若场上有小金针菇，再得 3 点。",
+    rarity: "common",
   },
   "mycelial-shelter": {
     key: "mycelial-shelter",
@@ -185,6 +245,7 @@ const CARD_LIBRARY = {
     cost: 1,
     palette: "guardian",
     description: "所有小金针菇成长 1。获得 5 点格挡，并替它们承受接下来 2 次群伤。",
+    rarity: "rare",
   },
   "patient-canopy": {
     key: "patient-canopy",
@@ -194,6 +255,7 @@ const CARD_LIBRARY = {
     cost: 2,
     palette: "guardian",
     description: "所有小金针菇成长 1。每个成熟分身对目标造成 5 点伤害，并为你提供 2 点格挡。",
+    rarity: "rare",
   },
   "butter-pyre": {
     key: "butter-pyre",
@@ -203,6 +265,7 @@ const CARD_LIBRARY = {
     cost: 1,
     palette: "martyr",
     description: "献祭最老的小金针菇。若成功，造成 12 点伤害并获得 1 点能量。",
+    rarity: "rare",
   },
   "funeral-bloom": {
     key: "funeral-bloom",
@@ -212,6 +275,7 @@ const CARD_LIBRARY = {
     cost: 2,
     palette: "martyr",
     description: "召唤 2 个小金针菇。每有 1 个死亡分身，再获得 3 点格挡并摸 1 张牌。",
+    rarity: "rare",
   },
   "shell-bash": {
     key: "shell-bash",
@@ -221,6 +285,7 @@ const CARD_LIBRARY = {
     cost: 1,
     palette: "macadamia",
     description: "造成 6 点伤害。若当前壳芯已有特性，额外触发一次。",
+    rarity: "common",
   },
   "crack-and-seal": {
     key: "crack-and-seal",
@@ -230,6 +295,7 @@ const CARD_LIBRARY = {
     cost: 1,
     palette: "macadamia",
     description: "造成 5 点伤害。若目标濒死，则把它的特性封进果壳。",
+    rarity: "common",
   },
   "kernel-recall": {
     key: "kernel-recall",
@@ -239,6 +305,7 @@ const CARD_LIBRARY = {
     cost: 0,
     palette: "macadamia",
     description: "获得 4 点格挡并抽 1 张牌。若已有壳芯，再得 2 点格挡。",
+    rarity: "common",
   },
   "mono-resonance": {
     key: "mono-resonance",
@@ -248,6 +315,7 @@ const CARD_LIBRARY = {
     cost: 1,
     palette: "focus",
     description: "造成 5 点伤害，并按专精层数强化当前壳芯。",
+    rarity: "rare",
   },
   "pressure-polish": {
     key: "pressure-polish",
@@ -257,6 +325,7 @@ const CARD_LIBRARY = {
     cost: 2,
     palette: "focus",
     description: "造成 10 点伤害，并追加一次当前壳芯。专精越高越狠。",
+    rarity: "rare",
   },
   "trait-carousel": {
     key: "trait-carousel",
@@ -266,6 +335,7 @@ const CARD_LIBRARY = {
     cost: 0,
     palette: "kaleidoscope",
     description: "切换到下一个已储存特性，并抽 1 张牌。",
+    rarity: "rare",
   },
   "pantry-choir": {
     key: "pantry-choir",
@@ -275,15 +345,121 @@ const CARD_LIBRARY = {
     cost: 2,
     palette: "kaleidoscope",
     description: "造成 4 点伤害，并把所有已储存特性一起唱出来。",
+    rarity: "rare",
+  },
+  "summon-vampire": {
+    key: "summon-vampire",
+    name: "血菇寄生",
+    suite: "skill",
+    target: "none",
+    cost: 1,
+    palette: "martyr",
+    description: "消耗 1 点宿主 HP，召唤 1 个吸血小金针菇。成熟后攻击会治疗宿主。",
+    rarity: "rare",
+  },
+  "summon-energy": {
+    key: "summon-energy",
+    name: "能菇充能",
+    suite: "skill",
+    target: "none",
+    cost: 1,
+    palette: "guardian",
+    description: "召唤 1 个能量小金针菇。成熟后每回合开始时为你提供 1 点临时能量。",
+    rarity: "rare",
+  },
+  "summon-buffer": {
+    key: "summon-buffer",
+    name: "壮菇培育",
+    suite: "skill",
+    target: "none",
+    cost: 1,
+    palette: "guardian",
+    description: "召唤 1 个缓冲小金针菇。成熟后攻击时给相邻分身 +1 攻击和 +1 最大 HP。",
+    rarity: "rare",
+  },
+  "summon-re-attack": {
+    key: "summon-re-attack",
+    name: "连击菌丝",
+    suite: "skill",
+    target: "none",
+    cost: 2,
+    palette: "martyr",
+    description: "召唤 1 个重击小金针菇。成熟后攻击完毕，令前一位分身再次攻击。",
+    rarity: "rare",
+  },
+  "summon-devourer": {
+    key: "summon-devourer",
+    name: "吞噬菌核",
+    suite: "skill",
+    target: "none",
+    cost: 2,
+    palette: "martyr",
+    description: "召唤 1 个吞噬者小金针菇。成熟时会吞噬场上所有其他分身，获得其双倍攻击和 HP。",
+    rarity: "epic",
+  },
+  "summon-bomb": {
+    key: "summon-bomb",
+    name: "爆菇埋设",
+    suite: "skill",
+    target: "none",
+    cost: 1,
+    palette: "martyr",
+    description: "召唤 1 个炸弹小金针菇。死亡时对全体敌人造成攻击×2 伤害。",
+    rarity: "rare",
+  },
+  "summon-poison": {
+    key: "summon-poison",
+    name: "毒菇分泌",
+    suite: "skill",
+    target: "none",
+    cost: 1,
+    palette: "martyr",
+    description: "召唤 1 个毒菇小金针菇。死亡时让击杀者获得攻击×2 层中毒。",
+    rarity: "rare",
+  },
+  "summon-draw": {
+    key: "summon-draw",
+    name: "抽丝菌柄",
+    suite: "skill",
+    target: "none",
+    cost: 1,
+    palette: "guardian",
+    description: "召唤 1 个抽牌小金针菇。死亡时你抽 1 张牌。",
+    rarity: "rare",
+  },
+  "accelerate-growth": {
+    key: "accelerate-growth",
+    name: "催熟激素",
+    suite: "skill",
+    target: "none",
+    cost: 2,
+    palette: "enoki",
+    description: "所有小金针菇剩余成熟回合 -1。",
+    rarity: "epic",
   },
 };
 
 const ENEMY_LIBRARY = {
+  "gastric-pebble": {
+    id: "gastric-pebble",
+    name: "胃石小砾",
+    glyph: "石",
+    tier: "normal",
+    threat: 1,
+    maxHp: 22,
+    traitId: "dryPlug",
+    intentCycle: [
+      { type: "attack", value: 6, label: "轻硌" },
+      { type: "guard", value: 5, label: "蜷成硬块" },
+      { type: "attack", value: 7, label: "硬蹭" },
+    ],
+  },
   "acidic-dumpling": {
     id: "acidic-dumpling",
     name: "酸泡饺子",
     glyph: "酸",
     tier: "normal",
+    threat: 2,
     maxHp: 24,
     traitId: "acidSplash",
     intentCycle: [
@@ -297,6 +473,7 @@ const ENEMY_LIBRARY = {
     name: "返酸酸奶",
     glyph: "酵",
     tier: "normal",
+    threat: 2,
     maxHp: 26,
     traitId: "mucusWrap",
     intentCycle: [
@@ -324,6 +501,7 @@ const ENEMY_LIBRARY = {
     name: "胆汁斥候",
     glyph: "胆",
     tier: "normal",
+    threat: 2,
     maxHp: 28,
     traitId: "bileJet",
     intentCycle: [
@@ -337,6 +515,7 @@ const ENEMY_LIBRARY = {
     name: "绒毛劫匪",
     glyph: "绒",
     tier: "normal",
+    threat: 3,
     maxHp: 30,
     traitId: "villusSnare",
     intentCycle: [
@@ -364,6 +543,7 @@ const ENEMY_LIBRARY = {
     name: "发酵米团",
     glyph: "胀",
     tier: "normal",
+    threat: 3,
     maxHp: 29,
     traitId: "gasBurst",
     intentCycle: [
@@ -377,6 +557,7 @@ const ENEMY_LIBRARY = {
     name: "黏膜息肉",
     glyph: "黏",
     tier: "normal",
+    threat: 4,
     maxHp: 32,
     traitId: "putridRush",
     intentCycle: [
@@ -429,7 +610,7 @@ const ENEMY_LIBRARY = {
   },
 };
 
-const STARTER_DECKS = {
+export const STARTER_DECKS = {
   enoki: [
     "cap-jab",
     "cap-jab",
@@ -542,4 +723,13 @@ export function buildRunPlan(finalBossId) {
       ],
     },
   ];
+}
+
+export function pickRewardCards(count, seed = Math.random()) {
+  const pool = [...REWARD_CARD_POOL];
+  for (let i = pool.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(Math.abs(seed + i) * (i + 1)) % (i + 1);
+    [pool[i], pool[j]] = [pool[j], pool[i]];
+  }
+  return pool.slice(0, count).map((key) => CARD_LIBRARY[key]);
 }

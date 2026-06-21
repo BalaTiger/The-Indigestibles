@@ -16,7 +16,7 @@ function nodeStroke(type, unlocked, cleared, isCurrent) {
   return "rgba(255, 255, 255, 0.35)";
 }
 
-export function MapScreen({ state, onNodeClick }) {
+export function MapScreen({ state, onNodeClick, mapLinkFromId = null }) {
   const layer = state.layers[state.layerIndex];
   const nodes = layer.nodes;
   const width = 1000;
@@ -70,6 +70,11 @@ export function MapScreen({ state, onNodeClick }) {
           ))}
         </div>
       </div>
+      {state.mapLinkMode && (
+        <div className="map-link-helper">
+          {mapLinkFromId ? "选择更靠右的目标节点来绘制单向捷径。" : "选择捷径起点。"}
+        </div>
+      )}
 
       <div className="map-screen__canvas">
         <svg viewBox={`0 0 ${width} ${height}`} className="map-screen__svg">
@@ -102,13 +107,14 @@ export function MapScreen({ state, onNodeClick }) {
               const cleared = node.cleared;
               const color = MAP_CONFIG.nodeTypeColors[node.type];
               const label = MAP_CONFIG.nodeTypeNames[node.type];
+              const linkSelected = mapLinkFromId === node.id;
               return (
                 <g
                   key={node.id}
                   transform={`translate(${pos.x}, ${pos.y})`}
-                  className={`map-node ${isCurrent ? "is-current" : ""} ${unlocked ? "is-unlocked" : ""} ${cleared ? "is-cleared" : ""}`}
-                  onClick={() => unlocked && onNodeClick(node)}
-                  style={{ cursor: unlocked ? "pointer" : "default" }}
+                  className={`map-node ${isCurrent ? "is-current" : ""} ${unlocked ? "is-unlocked" : ""} ${cleared ? "is-cleared" : ""} ${linkSelected ? "is-link-selected" : ""}`}
+                  onClick={() => (state.mapLinkMode || unlocked) && onNodeClick(node)}
+                  style={{ cursor: state.mapLinkMode || unlocked ? "pointer" : "default" }}
                 >
                   <circle
                     r={NODE_SIZE / 2}

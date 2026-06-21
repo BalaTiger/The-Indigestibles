@@ -3,9 +3,17 @@ import {
   LARGE_BOSS_POOL,
   MAP_CONFIG,
   TRAITS,
+  RELICS,
+  GLYCOGEN_REWARDS,
+  CARD_RARITY_PRICE,
+  RELIC_RARITY_PRICE,
+  REWARD_CARD_POOL,
+  STARTER_DECKS,
+  getCardDefinition,
   getEnemyBlueprint,
   getStarterDeck,
   pickLargeBoss,
+  pickRewardCards,
 } from "../data/content.js";
 
 function shuffleArray(array) {
@@ -31,6 +39,68 @@ function pickRandom(array) {
 
 function pickInt(min, max) {
   return Math.floor(rng() * (max - min + 1)) + min;
+}
+
+function getThreatBudget(node) {
+  return node.threatBudget ?? 2;
+}
+
+function buildThreatEncounter(pool, budget) {
+  const candidates = pool
+    .map((id) => getEnemyBlueprint(id))
+    .filter((enemy) => enemy?.threat)
+    .sort((a, b) => a.threat - b.threat || a.maxHp - b.maxHp);
+
+  const exactMatches = [];
+  let bestUnderBudget = null;
+  const maxEnemies = 4;
+
+  function rememberUnderBudget(totalThreat, picked) {
+    if (totalThreat <= budget && picked.length && (!bestUnderBudget || totalThreat > bestUnderBudget.totalThreat)) {
+      bestUnderBudget = { ids: [...picked], totalThreat };
+    }
+  }
+
+  function search(startIndex, totalThreat, picked) {
+    rememberUnderBudget(totalThreat, picked);
+    if (totalThreat === budget) {
+      exactMatches.push([...picked]);
+      return;
+    }
+    if (totalThreat > budget || picked.length >= maxEnemies) {
+      return;
+    }
+
+    for (let i = startIndex; i < candidates.length; i += 1) {
+      picked.push(candidates[i].id);
+      search(i, totalThreat + candidates[i].threat, picked);
+      picked.pop();
+    }
+  }
+
+  search(0, 0, []);
+  if (exactMatches.length) return pickRandom(exactMatches);
+  if (bestUnderBudget?.ids?.length) return bestUnderBudget.ids;
+  return [candidates[0]?.id].filter(Boolean);
+}
+
+function assignThreatBudgets(layers) {
+  let layerBaseThreat = 2;
+  layers.forEach((layer) => {
+    const nonBossColumns = [...new Set(layer.nodes.filter((node) => node.type !== "boss").map((node) => node.columnIndex))]
+      .sort((a, b) => a - b);
+
+    layer.nodes.forEach((node) => {
+      if (node.type === "boss") {
+        node.threatBudget = null;
+        return;
+      }
+      const columnOffset = nonBossColumns.indexOf(node.columnIndex);
+      node.threatBudget = layerBaseThreat + columnOffset + (node.type === "elite" ? 2 : 0);
+    });
+
+    layerBaseThreat += nonBossColumns.length + 1;
+  });
 }
 
 function makeLayerMeta(layerIndex, finalBossId) {
@@ -106,16 +176,21 @@ export function generateLayerNodes(layerIndex) {
   columnCounts.push(1);
 
   // 生成节点
+  // 规则：同一列的中间节点类型互不相同，确保任意分叉的两个子节点 B、C 类型不同
   let nodeIndex = 0;
   const columns = [];
   for (let c = 0; c < totalColumns; c += 1) {
     const count = columnCounts[c];
     const column = [];
+    const middleTypePool =
+      c === 0 || c === totalColumns - 1
+        ? []
+        : shuffleArray([...MAP_CONFIG.middleNodeTypes]);
     for (let i = 0; i < count; i += 1) {
       let type;
       if (c === 0) type = "combat";
       else if (c === totalColumns - 1) type = "boss";
-      else type = pickRandom(MAP_CONFIG.middleNodeTypes);
+      else type = middleTypePool.pop() || pickRandom(MAP_CONFIG.middleNodeTypes);
 
       const x = 0.06 + (c / (totalColumns - 1)) * 0.88;
       const yBase = count === 1 ? 0.5 : (i + 1) / (count + 1);
@@ -126,9 +201,11 @@ export function generateLayerNodes(layerIndex) {
         id: `layer${layerIndex}-node${nodeIndex}`,
         layerIndex,
         index: nodeIndex,
+        columnIndex: c,
         type,
         x,
         y,
+        threatBudget: null,
         unlocked: false,
         cleared: false,
         nextIds: [],
@@ -191,19 +268,17 @@ function getEnemyIdsForNode(node, layerMeta) {
     }
     return [MAP_CONFIG.layerBossIds[node.layerIndex]];
   }
-  if (node.type === "elite") {
-    const pool = MAP_CONFIG.elitePools[node.layerIndex];
-    const count = pickInt(1, 2);
-    return Array.from({ length: count }, () => pickRandom(pool));
-  }
-  const pool = MAP_CONFIG.normalPools[node.layerIndex];
-  const count = node.layerIndex === 0 ? pickInt(1, 2) : pickInt(1, 2);
-  return Array.from({ length: count }, () => pickRandom(pool));
+  const pool =
+    node.type === "elite"
+      ? MAP_CONFIG.elitePools[node.layerIndex]
+      : MAP_CONFIG.normalPools[node.layerIndex];
+  return buildThreatEncounter(pool, getThreatBudget(node));
 }
 
 export function makeEncounterFromNode(node, layerMeta) {
   const enemyIds = getEnemyIdsForNode(node, layerMeta);
   const isBoss = node.type === "boss";
+  const threatBudget = isBoss ? null : getThreatBudget(node);
   return {
     id: node.id,
     name: isBoss
@@ -211,9 +286,10 @@ export function makeEncounterFromNode(node, layerMeta) {
       : `${MAP_CONFIG.nodeTypeNames[node.type]} · ${node.id.split("-")[1]}`,
     note: isBoss
       ? layerMeta.bossNote
-      : `节点类型：${MAP_CONFIG.nodeTypeNames[node.type]}。`,
+      : `节点类型：${MAP_CONFIG.nodeTypeNames[node.type]}，威胁分 ${threatBudget}。`,
     enemyIds,
     boss: isBoss,
+    threatBudget,
   };
 }
 
@@ -242,6 +318,9 @@ function makePlayer(classId, buildId) {
       retaliate: 0,
       decoyReady: 0,
     },
+    glycogen: 0,
+    relics: [],
+    deckKeys: [...STARTER_DECKS[classId]],
   };
 }
 
@@ -257,6 +336,7 @@ export function createRunState({ classId = "enoki", buildId = null } = {}) {
       nodes,
     };
   });
+  assignThreatBudgets(layers);
 
   const state = {
     title: "The Indigestibles",
@@ -268,6 +348,9 @@ export function createRunState({ classId = "enoki", buildId = null } = {}) {
     layerIndex: 0,
     currentNodeId: layers[0].nodes[0].id,
     currentEncounter: null,
+    currentShop: null,
+    rewardPending: null,
+    mapLinkMode: false,
     phase: "player",
     turn: 1,
     log: [],
@@ -334,6 +417,122 @@ export function advanceToLayer(state, layerIndex) {
 export function restAtCampfire(state) {
   state.player.hp = Math.min(state.player.maxHp, state.player.hp + 10);
   return state;
+}
+
+export function generateShopInventory(layerIndex, seed = Math.random()) {
+  const cardKeys = [...REWARD_CARD_POOL];
+  const relicIds = Object.keys(RELICS);
+  const random = (s) => {
+    const x = Math.sin(seed + s) * 10000;
+    return x - Math.floor(x);
+  };
+
+  const cards = Array.from({ length: 4 }, (_, i) => {
+    const idx = Math.floor(random(i * 7) * cardKeys.length);
+    const key = cardKeys[idx];
+    const card = { ...getCardDefinition(key), instanceId: `shop-${key}-${Math.floor(random(i * 13) * 1e9)}` };
+    return {
+      card,
+      price: CARD_RARITY_PRICE[card.rarity || "common"] ?? CARD_RARITY_PRICE.common,
+      sold: false,
+    };
+  });
+
+  const relics = Array.from({ length: 3 }, (_, i) => {
+    const idx = Math.floor(random(i * 23) * relicIds.length);
+    const relicId = relicIds[idx];
+    const relic = RELICS[relicId];
+    return {
+      relicId,
+      price: RELIC_RARITY_PRICE[relic.rarity || "common"] ?? RELIC_RARITY_PRICE.common,
+      sold: false,
+    };
+  });
+
+  return { layerIndex, cards, relics };
+}
+
+export function addPlayerCard(state, cardKey) {
+  state.player.deckKeys.push(cardKey);
+}
+
+export function addPlayerRelic(state, relicId) {
+  if (!state.player.relics.includes(relicId)) {
+    state.player.relics.push(relicId);
+  }
+}
+
+export function computeGlycogenReward(state, nodeType) {
+  const layerIndex = state.layerIndex ?? 0;
+  let base;
+  if (nodeType === "combat") {
+    base = 5 * (layerIndex + 1);
+  } else if (nodeType === "elite") {
+    base = Math.floor(5 * (layerIndex + 1) * 1.6);
+  } else {
+    base = GLYCOGEN_REWARDS[nodeType] || GLYCOGEN_REWARDS.combat;
+  }
+  const hasGoldRelic = state.player.relics.includes("gold-relic");
+  return Math.floor(base * (hasGoldRelic ? 1.3 : 1));
+}
+
+export function addMapLink(state, fromNodeId, toNodeId) {
+  const from = findNodeById(state, fromNodeId);
+  const to = findNodeById(state, toNodeId);
+  if (!from || !to) return false;
+  const fromNode = from.node;
+  const toNode = to.node;
+  if (fromNode.id === toNode.id) return false;
+  if (fromNode.layerIndex !== toNode.layerIndex) return false;
+  if (fromNode.x >= toNode.x) return false;
+  if (fromNode.nextIds.includes(toNode.id)) return false;
+
+  fromNode.nextIds.push(toNode.id);
+  toNode.prevIds.push(fromNode.id);
+
+  // 如果起点已清理且目标未解锁，则自动解锁目标节点
+  if (fromNode.cleared && !toNode.unlocked) {
+    toNode.unlocked = true;
+  }
+  return true;
+}
+
+export function createCombatRewards(state, nodeType) {
+  const cardCount = state.player.relics.includes("reward-relic") ? 3 : 2;
+  return {
+    glycogen: computeGlycogenReward(state, nodeType),
+    cards: pickRewardCards(cardCount),
+  };
+}
+
+export function ensureShop(state) {
+  if (!state.currentShop || state.currentShop.layerIndex !== state.layerIndex) {
+    state.currentShop = generateShopInventory(state.layerIndex);
+  }
+  return state.currentShop;
+}
+
+export function buyShopCard(state, slotIndex) {
+  const shop = ensureShop(state);
+  const slot = shop.cards[slotIndex];
+  if (!slot || slot.sold || state.player.glycogen < slot.price) return false;
+  state.player.glycogen -= slot.price;
+  addPlayerCard(state, slot.card.key);
+  slot.sold = true;
+  return true;
+}
+
+export function buyShopRelic(state, slotIndex) {
+  const shop = ensureShop(state);
+  const slot = shop.relics[slotIndex];
+  if (!slot || slot.sold || state.player.glycogen < slot.price) return false;
+  state.player.glycogen -= slot.price;
+  addPlayerRelic(state, slot.relicId);
+  slot.sold = true;
+  if (slot.relicId === "map-link-relic") {
+    state.mapLinkMode = true;
+  }
+  return true;
 }
 
 export { HEROES, TRAITS };

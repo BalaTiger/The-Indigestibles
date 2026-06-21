@@ -1,9 +1,14 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { FastForward, Gem, Heart, LogOut, Map, Shield, X } from "lucide-react";
+import { FastForward, Heart, LogOut, Map, Shield, Skull, Sword, X } from "lucide-react";
 import { HEROES, MAP_CONFIG, TRAITS } from "./data/content";
 import {
+  addMapLink,
+  buyShopCard,
+  buyShopRelic,
+  createCombatRewards,
   advanceToLayer,
   createRunState,
+  ensureShop,
   findNodeById,
   getCurrentLayer,
   getCurrentNode,
@@ -148,15 +153,122 @@ function QuitRunButton({ onClick, disabled }) {
   );
 }
 
-function MiniColony({ minis, floaters, hitFx }) {
+function RewardChoiceModal({ reward, onPick, onSkip }) {
+  if (!reward) return null;
+  return (
+    <div className="modal-overlay">
+      <div className="modal-card modal-card--victory">
+        <strong>战利品</strong>
+        <p>获得 {reward.glycogen} 糖原，并从以下卡牌中选择一张加入牌组。</p>
+        <div className="reward-grid">
+          {reward.cards.map((card) => (
+            <button key={card.key} type="button" className="reward-option" onClick={() => onPick(card.key)}>
+              <span className="energy-gem">{card.cost}</span>
+              <strong>{card.name}</strong>
+              <small>{card.description}</small>
+            </button>
+          ))}
+        </div>
+        <button type="button" className="action-button action-button--ghost" onClick={onSkip}>
+          跳过选牌
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function MiniMaturityBadge({ mini }) {
+  const radius = 16;
+  const circumference = 2 * Math.PI * radius;
+  const progress = mini.ready
+    ? 1
+    : Math.min(1, Math.max(0, mini.growth / mini.maturityThreshold));
+  const dashArray = `${progress * circumference} ${circumference}`;
+  const turnsLeft = Math.max(0, mini.maturityThreshold - mini.growth);
+
+  return (
+    <div className={`mini-maturity ${mini.ready ? "is-ready" : ""}`}>
+      <svg className="mini-maturity__ring" viewBox="0 0 36 36">
+        <circle className="mini-maturity__track" cx="18" cy="18" r={radius} />
+        <circle
+          className="mini-maturity__fill"
+          cx="18"
+          cy="18"
+          r={radius}
+          style={{ strokeDasharray: dashArray }}
+        />
+      </svg>
+      <span className="mini-maturity__label">
+        {mini.ready ? "成熟" : `${turnsLeft}回合`}
+      </span>
+    </div>
+  );
+}
+
+function MiniTooltip({ mini }) {
+  const turnsLeft = Math.max(0, mini.maturityThreshold - mini.growth);
+  const kindNotes = {
+    vampire: "血菇：援击时为你回复等量生命。",
+    energy: "蓄能菇：成熟后每回合开始额外获得 1 点能量。",
+    buffer: "缓冲菇：援击时使相邻分身各 +1/+1。",
+    "re-attack": "连击菇：援击时让前一只成熟分身再攻击一次。",
+    devourer: "吞噬者：成熟后会吞掉其他分身并巨幅成长。",
+    bomb: "爆菇：死亡时对全体敌人造成爆炸伤害。",
+    poison: "毒菇：死亡时让击杀者中毒。",
+    draw: "抽丝菇：死亡时抽 1 张牌。",
+  };
+
+  const deathrattleLabels = {
+    bomb: "爆炸",
+    poison: "中毒",
+    draw: "抽牌",
+  };
+
+  return (
+    <div className="mini-tooltip">
+      <strong>{mini.ready ? "成熟分身" : `幼体（还差 ${turnsLeft} 回合成熟）`}</strong>
+      <span>
+        攻击 {mini.attack} · 生命 {mini.hp}/{mini.maxHp}
+      </span>
+      {kindNotes[mini.kind] && <small>{kindNotes[mini.kind]}</small>}
+      {mini.deathrattleIcon && (
+        <small>
+          亡语：
+          {deathrattleLabels[mini.deathrattleIcon] || mini.deathrattleIcon}
+        </small>
+      )}
+    </div>
+  );
+}
+
+function MiniColony({ minis, floaters, hitFx, avatarActions }) {
   return (
     <div className="mini-colony">
       {minis.map((mini) => (
-          <div key={mini.id} className={`mini-unit ${mini.ready ? "is-ready" : ""}`}>
-            <FxFloaters floaters={floaters[makeTargetKey("mini", mini.id)]} />
-            <HitFxLayer effects={hitFx[makeTargetKey("mini", mini.id)]} />
-            <BattleAvatar isPlayer classId="mini-enoki" color="#d4d785" glyph="" label="" />
-          <div className="mini-unit__meta">HP {mini.hp}</div>
+        <div key={mini.id} className={`mini-unit ${mini.ready ? "is-ready" : "is-immature"}`}>
+          <FxFloaters floaters={floaters[makeTargetKey("mini", mini.id)]} />
+          <HitFxLayer effects={hitFx[makeTargetKey("mini", mini.id)]} />
+          <div className="mini-unit__body">
+            <MiniMaturityBadge mini={mini} />
+            <BattleAvatar
+              isPlayer
+              classId="mini-enoki"
+              color="#d4d785"
+              glyph=""
+              label=""
+              action={avatarActions[makeTargetKey("mini", mini.id)]}
+            />
+            {mini.deathrattleIcon && (
+              <div className="mini-unit__deathmark" title="亡语">
+                <Skull size={16} />
+              </div>
+            )}
+          </div>
+          <MiniTooltip mini={mini} />
+          <div className="mini-unit__meta">
+            <span><Sword size={12} />{mini.attack}</span>
+            <span><Heart size={12} />{mini.hp}/{mini.maxHp}</span>
+          </div>
         </div>
       ))}
     </div>
@@ -214,6 +326,7 @@ export default function App() {
   const [showMapOverlay, setShowMapOverlay] = useState(false);
   const [hoveredCardCost, setHoveredCardCost] = useState(null);
   const [showQuitConfirm, setShowQuitConfirm] = useState(false);
+  const [mapLinkFromId, setMapLinkFromId] = useState(null);
   const stateRef = useRef(state);
   const aimRef = useRef(null);
   const ignoreNextAimClickRef = useRef(false);
@@ -420,6 +533,19 @@ export default function App() {
   const enterNode = useCallback(
     (node) => {
       if (!node.unlocked || isResolving) return;
+      if (state.mapLinkMode) {
+        if (!mapLinkFromId) {
+          setMapLinkFromId(node.id);
+          return;
+        }
+        const next = structuredClone(state);
+        if (addMapLink(next, mapLinkFromId, node.id)) {
+          next.mapLinkMode = false;
+          setState(next);
+          setMapLinkFromId(null);
+        }
+        return;
+      }
       clearAim();
       setFloaters({});
       setHitFx({});
@@ -436,12 +562,18 @@ export default function App() {
         return;
       }
 
+      if (node.type === "shop") {
+        const withShop = structuredClone(next);
+        ensureShop(withShop);
+        setState(withShop);
+        setScreen("shop");
+        return;
+      }
       setState(next);
-      if (node.type === "shop") setScreen("shop");
-      else if (node.type === "event") setScreen("event");
+      if (node.type === "event") setScreen("event");
       else if (node.type === "campfire") setScreen("campfire");
     },
-    [clearAim, isResolving, state],
+    [clearAim, isResolving, mapLinkFromId, state],
   );
 
   const returnToMap = useCallback(() => {
@@ -467,6 +599,15 @@ export default function App() {
       return;
     }
 
+    if (currentNode.type === "combat" || currentNode.type === "elite") {
+      const rewardState = structuredClone(next);
+      const reward = createCombatRewards(rewardState, currentNode.type);
+      rewardState.player.glycogen += reward.glycogen;
+      rewardState.rewardPending = reward;
+      setState(rewardState);
+      return;
+    }
+
     if (currentNode.type === "boss") {
       advanceToLayer(next, next.layerIndex + 1);
       setState(next);
@@ -487,6 +628,34 @@ export default function App() {
     }
     completeNodeAndReturn();
   }, [completeNodeAndReturn, state]);
+
+  const handleRewardPick = useCallback((cardKey) => {
+    const next = structuredClone(state);
+    if (!next.rewardPending) return;
+    next.player.deckKeys.push(cardKey);
+    next.rewardPending = null;
+    unlockNextNodes(next, next.currentNodeId);
+    setState(next);
+    setScreen("map");
+  }, [state]);
+
+  const handleRewardSkip = useCallback(() => {
+    const next = structuredClone(state);
+    next.rewardPending = null;
+    unlockNextNodes(next, next.currentNodeId);
+    setState(next);
+    setScreen("map");
+  }, [state]);
+
+  const handleBuyShopCard = useCallback((slotIndex) => {
+    const next = structuredClone(state);
+    if (buyShopCard(next, slotIndex)) setState(next);
+  }, [state]);
+
+  const handleBuyShopRelic = useCallback((slotIndex) => {
+    const next = structuredClone(state);
+    if (buyShopRelic(next, slotIndex)) setState(next);
+  }, [state]);
 
   const handleDefeatConfirm = useCallback(() => {
     setScreen("title");
@@ -712,11 +881,20 @@ export default function App() {
   );
 
   const renderMap = () => (
-    <MapScreen state={state} onNodeClick={enterNode} />
+    <MapScreen state={state} onNodeClick={enterNode} mapLinkFromId={mapLinkFromId} />
   );
 
   const renderNonCombat = () => {
-    if (screen === "shop") return <ShopScreen state={state} onLeave={completeNodeAndReturn} />;
+    if (screen === "shop") {
+      return (
+        <ShopScreen
+          state={state}
+          onBuyCard={handleBuyShopCard}
+          onBuyRelic={handleBuyShopRelic}
+          onLeave={completeNodeAndReturn}
+        />
+      );
+    }
     if (screen === "event") return <EventScreen state={state} onLeave={completeNodeAndReturn} />;
     if (screen === "campfire")
       return (
@@ -789,7 +967,12 @@ export default function App() {
                   </div>
 
                   {state.player.classId === "enoki" ? (
-                    <MiniColony minis={state.player.minis} floaters={floaters} hitFx={hitFx} />
+                    <MiniColony
+                      minis={state.player.minis}
+                      floaters={floaters}
+                      hitFx={hitFx}
+                      avatarActions={avatarActions}
+                    />
                   ) : (
                     <TraitRack player={state.player} />
                   )}
@@ -822,7 +1005,7 @@ export default function App() {
             </div>
 
             <div className="battle-energy">
-              <Gem size={22} />
+              <span className="energy-gem battle-energy__gem" aria-hidden="true" />
               <strong>{state.player.energy}</strong>
               {hoveredCardCost !== null && (
                 <span className="battle-energy__preview">-{hoveredCardCost}</span>
@@ -953,6 +1136,7 @@ export default function App() {
   return (
     <>
       {content}
+      <RewardChoiceModal reward={state.rewardPending} onPick={handleRewardPick} onSkip={handleRewardSkip} />
       {showQuitConfirm && (
         <div className="modal-overlay">
           <div className="modal-card">

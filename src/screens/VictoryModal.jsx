@@ -4,6 +4,7 @@ export function VictoryModal({ state, onConfirm }) {
   const node = state.layers[state.layerIndex].nodes.find((n) => n.id === state.currentNodeId);
   const isFinalBoss = node?.type === "boss" && state.layerIndex === state.layers.length - 1;
   const isLayerBoss = node?.type === "boss" && !isFinalBoss;
+  const reward = state.rewardPending;
 
   let title = "战斗胜利";
   let desc = "你清空了这片肠道，前方的节点已经解锁。";
@@ -24,6 +25,7 @@ export function VictoryModal({ state, onConfirm }) {
       <div className="modal-card modal-card--victory">
         <strong>{title}</strong>
         <p>{desc}</p>
+        {reward && <p>本场已获得 {reward.glycogen} 糖原，先选战利品再继续。</p>}
         <button type="button" className="action-button" onClick={onConfirm}>
           {button}
         </button>
